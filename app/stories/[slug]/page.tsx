@@ -37,6 +37,8 @@ export default async function Story({
 }) {
   const { slug } = params;
 
+  console.log("Slug from URL:", slug);
+
   const { data } = await supabase
     .from("stories")
     .select("*")
