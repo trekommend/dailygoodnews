@@ -1,24 +1,41 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
+import Parser from "rss-parser";
+import { createClient } from "@supabase/supabase-js";
 
-export async function GET(): Promise<Response> {
-  return new Promise((resolve) => {
-    exec("node scripts/importNews.js", (error, stdout, stderr) => {
-      if (error) {
-        resolve(
-          NextResponse.json(
-            { success: false, error: stderr },
-            { status: 500 }
-          )
-        );
-      } else {
-        resolve(
-          NextResponse.json({
-            success: true,
-            output: stdout,
-          })
-        );
-      }
-    });
-  });
+export async function GET() {
+  const parser = new Parser();
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const feeds = [
+    {
+      url: "https://www.goodnewsnetwork.org/feed/",
+      source: "Good News Network",
+    },
+    {
+      url: "https://www.positive.news/feed/",
+      source: "Positive News",
+    },
+  ];
+
+  for (const feedInfo of feeds) {
+    const feed = await parser.parseURL(feedInfo.url);
+
+    for (const item of feed.items.slice(0, 10)) {
+      await supabase.from("stories").upsert(
+        {
+          title: item.title,
+          content: item.contentSnippet,
+          source_name: feedInfo.source,
+          source_url: item.link,
+        },
+        { onConflict: "source_url" }
+      );
+    }
+  }
+
+  return NextResponse.json({ success: true });
 }
