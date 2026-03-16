@@ -1,24 +1,60 @@
-import { NextResponse } from "next/server";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { runImporter } = require("../../../lib/runImporter");
+import Parser from "rss-parser";
+import { supabase } from "@/lib/supabase";
 
-export const dynamic = "force-dynamic";
+export async function GET() {
+  const logs: string[] = [];
 
-export async function GET(): Promise<Response> {
   try {
-    const logs: string[] = await runImporter();
+    // Debug environment variables
+    logs.push(`SUPABASE URL exists: ${!!process.env.NEXT_PUBLIC_SUPABASE_URL}`);
+    logs.push(`SUPABASE KEY exists: ${!!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`);
+    logs.push(`SUPABASE URL value: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`);
 
-    return NextResponse.json({
+    const parser = new Parser();
+
+    const feeds = [
+      "https://www.goodnewsnetwork.org/feed/",
+      "https://www.positive.news/feed/",
+    ];
+
+    for (const feedUrl of feeds) {
+      const feed = await parser.parseURL(feedUrl);
+
+      logs.push(`Feed: ${feed.title}`);
+      logs.push(`Items: ${feed.items.length}`);
+
+      // Limit to first 10 items per feed for testing
+      for (const item of feed.items.slice(0, 10)) {
+        try {
+          const { error } = await supabase.from("articles").insert({
+            title: item.title ?? "Untitled",
+            url: item.link ?? "",
+            summary: item.contentSnippet ?? "",
+            published_at: item.pubDate ?? new Date().toISOString(),
+          });
+
+          if (error) {
+            logs.push(`Insert error: ${error.message}`);
+          } else {
+            logs.push(`Inserted: ${item.title}`);
+          }
+        } catch (err) {
+          logs.push(`Insert error: ${String(err)}`);
+        }
+      }
+    }
+
+    return Response.json({
       success: true,
       logs,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error?.message || "Importer failed",
-      },
-      { status: 500 }
-    );
+
+  } catch (err) {
+    logs.push(`Route error: ${String(err)}`);
+
+    return Response.json({
+      success: false,
+      logs,
+    });
   }
 }
