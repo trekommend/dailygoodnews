@@ -1,41 +1,24 @@
 import { NextResponse } from "next/server";
-import Parser from "rss-parser";
-import { createClient } from "@supabase/supabase-js";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { runImporter } = require("../../../lib/runImporter");
 
-export async function GET() {
-  const parser = new Parser();
+export const dynamic = "force-dynamic";
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+export async function GET(): Promise<Response> {
+  try {
+    const logs: string[] = await runImporter();
 
-  const feeds = [
-    {
-      url: "https://www.goodnewsnetwork.org/feed/",
-      source: "Good News Network",
-    },
-    {
-      url: "https://www.positive.news/feed/",
-      source: "Positive News",
-    },
-  ];
-
-  for (const feedInfo of feeds) {
-    const feed = await parser.parseURL(feedInfo.url);
-
-    for (const item of feed.items.slice(0, 10)) {
-      await supabase.from("stories").upsert(
-        {
-          title: item.title,
-          content: item.contentSnippet,
-          source_name: feedInfo.source,
-          source_url: item.link,
-        },
-        { onConflict: "source_url" }
-      );
-    }
+    return NextResponse.json({
+      success: true,
+      logs,
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: error?.message || "Importer failed",
+      },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({ success: true });
 }
