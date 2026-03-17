@@ -15,6 +15,46 @@ type FeedItem = {
   ["media:thumbnail"]?: { $?: { url?: string } };
 };
 
+type FeedSource = {
+  name: string;
+  url: string;
+  defaultCategory: string;
+  weight?: number;
+};
+
+const FEED_SOURCES: FeedSource[] = [
+  {
+    name: "Good News Network",
+    url: "https://www.goodnewsnetwork.org/feed/",
+    defaultCategory: "hope",
+    weight: 3,
+  },
+  {
+    name: "Positive News",
+    url: "https://www.positive.news/feed/",
+    defaultCategory: "hope",
+    weight: 3,
+  },
+  {
+    name: "Fox News Health",
+    url: "https://moxie.foxnews.com/google-publisher/health.xml",
+    defaultCategory: "health",
+    weight: 2,
+  },
+  {
+    name: "Fox News Science",
+    url: "https://moxie.foxnews.com/google-publisher/science.xml",
+    defaultCategory: "hope",
+    weight: 2,
+  },
+  {
+    name: "Fox News Travel",
+    url: "https://moxie.foxnews.com/google-publisher/travel.xml",
+    defaultCategory: "community",
+    weight: 2,
+  },
+];
+
 function slugify(text: string) {
   return text
     .toLowerCase()
@@ -33,17 +73,6 @@ function makeUniqueSlug(title: string, sourceUrl: string) {
     .slice(-8);
 
   return `${base}-${suffix}`;
-}
-
-function guessCategory(title: string, summary: string) {
-  const text = `${title} ${summary}`.toLowerCase();
-
-  if (/animal|bird|dog|cat|wildlife|species|zoo/.test(text)) return "animals";
-  if (/health|hospital|medical|therapy|wellness/.test(text)) return "health";
-  if (/community|school|volunteer|neighbors|family/.test(text)) return "community";
-  if (/kindness|charity|helped|donated|gift/.test(text)) return "kindness";
-
-  return "hope";
 }
 
 function absoluteUrl(url: string, baseUrl: string) {
@@ -141,6 +170,98 @@ function chooseBestContent(summary: string, rawContent: string) {
   };
 }
 
+function guessCategory(title: string, summary: string, fallback = "hope") {
+  const text = `${title} ${summary}`.toLowerCase();
+
+  if (/animal|bird|dog|cat|wildlife|species|zoo/.test(text)) return "animals";
+  if (/health|hospital|medical|therapy|wellness|mental health|patient/.test(text)) return "health";
+  if (/community|school|volunteer|neighbors|family|town|city|teacher/.test(text)) return "community";
+  if (/kindness|charity|helped|donated|gift|fundraiser|support/.test(text)) return "kindness";
+
+  return fallback;
+}
+
+function positivityScore(title: string, summary: string, sourceWeight = 1) {
+  const text = `${title} ${summary}`.toLowerCase();
+
+  const positivePatterns = [
+    /breakthrough/,
+    /recovery/,
+    /rescued?/,
+    /saved?/,
+    /helped?/,
+    /protect(ed|ion)/,
+    /restor(ed|ation)/,
+    /improv(ed|ement)/,
+    /reduc(ed|tion)/,
+    /community/,
+    /volunteer/,
+    /donat(ed|ion)/,
+    /fundraiser/,
+    /innovation/,
+    /clean energy/,
+    /solar/,
+    /wildlife/,
+    /conservation/,
+    /health/,
+    /wellness/,
+    /hope/,
+    /uplift/,
+    /kindness/,
+    /success/,
+    /record low/,
+    /decline in pollution/,
+    /recycling/,
+    /debunked/,
+    /inspiring/,
+    /uplifting/,
+    /heartwarming/,
+  ];
+
+  const negativePatterns = [
+    /killed?/,
+    /murder/,
+    /shooting/,
+    /war/,
+    /bomb/,
+    /crash/,
+    /scandal/,
+    /fraud/,
+    /arrest/,
+    /lawsuit/,
+    /indict/,
+    /outrage/,
+    /attack/,
+    /deadly/,
+    /disaster/,
+    /explosion/,
+    /hostage/,
+    /terror/,
+    /rape/,
+    /abuse/,
+    /partisan/,
+    /election/,
+    /trump/,
+    /biden/,
+  ];
+
+  let score = sourceWeight;
+
+  for (const pattern of positivePatterns) {
+    if (pattern.test(text)) score += 2;
+  }
+
+  for (const pattern of negativePatterns) {
+    if (pattern.test(text)) score -= 3;
+  }
+
+  return score;
+}
+
+function shouldImportStory(title: string, summary: string, sourceWeight = 1) {
+  return positivityScore(title, summary, sourceWeight) >= 2;
+}
+
 function extractImageFromFeed(item: FeedItem, sourceUrl: string): string | null {
   return (
     cleanImageUrl(item.enclosure?.url, sourceUrl) ||
@@ -221,94 +342,103 @@ export async function GET() {
       },
     });
 
-    const feeds = [
-      "https://www.goodnewsnetwork.org/feed/",
-      "https://www.positive.news/feed/",
-    ];
-
     let savedCount = 0;
+    let skippedCount = 0;
     let feedImageCount = 0;
     let pageImageCount = 0;
     let existingImageCount = 0;
     let noImageCount = 0;
     let errorCount = 0;
 
-    for (const feedUrl of feeds) {
-      const feed = await parser.parseURL(feedUrl);
-      logs.push(`Feed: ${feed.title} (${feed.items.length} items)`);
+    for (const source of FEED_SOURCES) {
+      try {
+        const feed = await parser.parseURL(source.url);
+        logs.push(`Feed: ${source.name} (${feed.items.length} items)`);
 
-      for (const item of feed.items.slice(0, 10)) {
-        try {
-          const title = item.title ?? "Untitled";
-          const rawSummary = item.contentSnippet ?? "";
-          const rawContent = item["content:encoded"] ?? item.content ?? rawSummary;
-          const sourceUrl = item.link ?? "";
-          const publishDate = item.pubDate ?? new Date().toISOString();
+        for (const item of feed.items.slice(0, 10)) {
+          try {
+            const title = item.title ?? "Untitled";
+            const rawSummary = item.contentSnippet ?? "";
+            const rawContent = item["content:encoded"] ?? item.content ?? rawSummary;
+            const sourceUrl = item.link ?? "";
+            const publishDate = item.pubDate ?? new Date().toISOString();
 
-          if (!sourceUrl) continue;
+            if (!sourceUrl) continue;
 
-          const { summary, content } = chooseBestContent(rawSummary, rawContent);
-          const slug = makeUniqueSlug(title, sourceUrl);
-          const categorySlug = guessCategory(title, summary);
+            const { summary, content } = chooseBestContent(rawSummary, rawContent);
 
-          const { data: existingRow } = await supabase
-            .from("stories")
-            .select("image_url")
-            .eq("source_url", sourceUrl)
-            .maybeSingle();
-
-          let imageUrl = extractImageFromFeed(item, sourceUrl);
-          let imageSource: "feed" | "page" | "existing" | "none" = imageUrl ? "feed" : "none";
-
-          if (!imageUrl) {
-            const scrapedImage = await extractImageFromArticlePage(sourceUrl);
-            if (scrapedImage) {
-              imageUrl = scrapedImage;
-              imageSource = "page";
+            if (!shouldImportStory(title, summary, source.weight ?? 1)) {
+              skippedCount += 1;
+              continue;
             }
-          }
 
-          if (!imageUrl && existingRow?.image_url) {
-            imageUrl = existingRow.image_url;
-            imageSource = "existing";
-          }
+            const slug = makeUniqueSlug(title, sourceUrl);
+            const categorySlug = guessCategory(title, summary, source.defaultCategory);
 
-          const story = {
-            title,
-            slug,
-            summary,
-            content,
-            image_url: imageUrl,
-            category_slug: categorySlug,
-            featured: false,
-            source_url: sourceUrl,
-            publish_date: publishDate,
-          };
+            const { data: existingRow } = await supabase
+              .from("stories")
+              .select("image_url")
+              .eq("source_url", sourceUrl)
+              .maybeSingle();
 
-          const { error } = await supabase
-            .from("stories")
-            .upsert(story, { onConflict: "source_url" });
+            let imageUrl = extractImageFromFeed(item, sourceUrl);
+            let imageSource: "feed" | "page" | "existing" | "none" = imageUrl ? "feed" : "none";
 
-          if (error) {
+            if (!imageUrl) {
+              const scrapedImage = await extractImageFromArticlePage(sourceUrl);
+              if (scrapedImage) {
+                imageUrl = scrapedImage;
+                imageSource = "page";
+              }
+            }
+
+            if (!imageUrl && existingRow?.image_url) {
+              imageUrl = existingRow.image_url;
+              imageSource = "existing";
+            }
+
+            const story = {
+              title,
+              slug,
+              summary,
+              content,
+              image_url: imageUrl,
+              category_slug: categorySlug,
+              featured: false,
+              source_name: source.name,
+              source_url: sourceUrl,
+              publish_date: publishDate,
+            };
+
+            const { error } = await supabase
+              .from("stories")
+              .upsert(story, { onConflict: "source_url" });
+
+            if (error) {
+              errorCount += 1;
+              logs.push(`Error saving "${title}": ${error.message}`);
+              continue;
+            }
+
+            savedCount += 1;
+
+            if (imageSource === "feed") feedImageCount += 1;
+            else if (imageSource === "page") pageImageCount += 1;
+            else if (imageSource === "existing") existingImageCount += 1;
+            else noImageCount += 1;
+          } catch (err) {
             errorCount += 1;
-            logs.push(`Error saving "${title}": ${error.message}`);
-            continue;
+            logs.push(`Error saving item from ${source.name}: ${String(err)}`);
           }
-
-          savedCount += 1;
-
-          if (imageSource === "feed") feedImageCount += 1;
-          else if (imageSource === "page") pageImageCount += 1;
-          else if (imageSource === "existing") existingImageCount += 1;
-          else noImageCount += 1;
-        } catch (err) {
-          errorCount += 1;
-          logs.push(`Error saving item: ${String(err)}`);
         }
+      } catch (err) {
+        errorCount += 1;
+        logs.push(`Error reading feed ${source.name}: ${String(err)}`);
       }
     }
 
     logs.push(`Saved: ${savedCount}`);
+    logs.push(`Skipped by positivity filter: ${skippedCount}`);
     logs.push(`Images from feed: ${feedImageCount}`);
     logs.push(`Images from page: ${pageImageCount}`);
     logs.push(`Images kept from existing rows: ${existingImageCount}`);
