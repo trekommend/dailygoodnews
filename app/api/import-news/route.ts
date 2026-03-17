@@ -46,15 +46,71 @@ function guessCategory(title: string, summary: string) {
   return "hope";
 }
 
-function extractImage(item: FeedItem): string | null {
+function absoluteUrl(url: string, baseUrl: string) {
+  try {
+    return new URL(url, baseUrl).toString();
+  } catch {
+    return url;
+  }
+}
+
+function extractImageFromFeed(item: FeedItem): string | null {
   return (
     item.enclosure?.url ||
     item["media:content"]?.$?.url ||
     item["media:thumbnail"]?.$?.url ||
-    item.content?.match(/<img[^>]+src="([^"]+)"/)?.[1] ||
-    item["content:encoded"]?.match(/<img[^>]+src="([^"]+)"/)?.[1] ||
+    item.content?.match(/<img[^>]+src="([^"]+)"/i)?.[1] ||
+    item["content:encoded"]?.match(/<img[^>]+src="([^"]+)"/i)?.[1] ||
     null
   );
+}
+
+async function extractImageFromArticlePage(articleUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(articleUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 DailyGoodNewsBot/1.0",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) return null;
+
+    const html = await response.text();
+
+    const ogImage =
+      html.match(
+        /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
+      )?.[1] ||
+      html.match(
+        /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i
+      )?.[1];
+
+    if (ogImage) {
+      return absoluteUrl(ogImage, articleUrl);
+    }
+
+    const twitterImage =
+      html.match(
+        /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
+      )?.[1] ||
+      html.match(
+        /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i
+      )?.[1];
+
+    if (twitterImage) {
+      return absoluteUrl(twitterImage, articleUrl);
+    }
+
+    const firstImg = html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
+    if (firstImg) {
+      return absoluteUrl(firstImg, articleUrl);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export async function GET() {
@@ -76,7 +132,6 @@ export async function GET() {
       "https://www.positive.news/feed/",
     ];
 
-    logs.push(`SUPABASE URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`);
     logs.push("Target table: stories");
 
     for (const feedUrl of feeds) {
@@ -92,7 +147,15 @@ export async function GET() {
           const content = item["content:encoded"] ?? item.content ?? summary;
           const sourceUrl = item.link ?? "";
           const publishDate = item.pubDate ?? new Date().toISOString();
-          const imageUrl = extractImage(item);
+
+          let imageUrl = extractImageFromFeed(item);
+          let imageSource = "feed";
+
+          if (!imageUrl && sourceUrl) {
+            imageUrl = await extractImageFromArticlePage(sourceUrl);
+            imageSource = imageUrl ? "page" : "none";
+          }
+
           const slug = makeUniqueSlug(title, sourceUrl);
           const categorySlug = guessCategory(title, summary);
 
@@ -118,7 +181,7 @@ export async function GET() {
             logs.push(`Upsert error: ${error.message}`);
           } else {
             logs.push(
-              `Saved row: ${data.title} | publish_date: ${data.publish_date} | image: ${data.image_url ? "yes" : "no"}`
+              `Saved row: ${data.title} | publish_date: ${data.publish_date} | image: ${data.image_url ? imageSource : "no"}`
             );
           }
         } catch (err) {
