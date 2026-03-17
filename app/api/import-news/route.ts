@@ -146,14 +146,16 @@ export async function GET() {
       "https://www.positive.news/feed/",
     ];
 
-    logs.push(`SUPABASE URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`);
-    logs.push("Target table: stories");
+    let savedCount = 0;
+    let feedImageCount = 0;
+    let pageImageCount = 0;
+    let existingImageCount = 0;
+    let noImageCount = 0;
+    let errorCount = 0;
 
     for (const feedUrl of feeds) {
       const feed = await parser.parseURL(feedUrl);
-
-      logs.push(`Feed: ${feed.title}`);
-      logs.push(`Items: ${feed.items.length}`);
+      logs.push(`Feed: ${feed.title} (${feed.items.length} items)`);
 
       for (const item of feed.items.slice(0, 10)) {
         try {
@@ -163,26 +165,19 @@ export async function GET() {
           const sourceUrl = item.link ?? "";
           const publishDate = item.pubDate ?? new Date().toISOString();
 
-          if (!sourceUrl) {
-            logs.push(`Skipped row with missing source URL: ${title}`);
-            continue;
-          }
+          if (!sourceUrl) continue;
 
           const slug = makeUniqueSlug(title, sourceUrl);
           const categorySlug = guessCategory(title, summary);
 
-          const { data: existingRow, error: existingError } = await supabase
+          const { data: existingRow } = await supabase
             .from("stories")
-            .select("id, image_url")
+            .select("image_url")
             .eq("source_url", sourceUrl)
             .maybeSingle();
 
-          if (existingError) {
-            logs.push(`Existing lookup error: ${existingError.message}`);
-          }
-
           let imageUrl = extractImageFromFeed(item, sourceUrl);
-          let imageSource = imageUrl ? "feed" : "none";
+          let imageSource: "feed" | "page" | "existing" | "none" = imageUrl ? "feed" : "none";
 
           if (!imageUrl) {
             const scrapedImage = await extractImageFromArticlePage(sourceUrl);
@@ -209,34 +204,35 @@ export async function GET() {
             publish_date: publishDate,
           };
 
-          const { data, error } = await supabase
+          const { error } = await supabase
             .from("stories")
-            .upsert(story, { onConflict: "source_url" })
-            .select("id, title, source_url, publish_date, image_url")
-            .single();
+            .upsert(story, { onConflict: "source_url" });
 
           if (error) {
-            logs.push(`Upsert error: ${error.message}`);
-          } else {
-            logs.push(
-              `Saved row: ${data.title} | publish_date: ${data.publish_date} | image: ${data.image_url ? imageSource : "no"}`
-            );
+            errorCount += 1;
+            logs.push(`Error saving "${title}": ${error.message}`);
+            continue;
           }
+
+          savedCount += 1;
+
+          if (imageSource === "feed") feedImageCount += 1;
+          else if (imageSource === "page") pageImageCount += 1;
+          else if (imageSource === "existing") existingImageCount += 1;
+          else noImageCount += 1;
         } catch (err) {
-          logs.push(`Upsert error: ${String(err)}`);
+          errorCount += 1;
+          logs.push(`Error saving item: ${String(err)}`);
         }
       }
     }
 
-    const { count, error: countError } = await supabase
-      .from("stories")
-      .select("*", { count: "exact", head: true });
-
-    if (countError) {
-      logs.push(`Count error: ${countError.message}`);
-    } else {
-      logs.push(`Stories row count: ${count}`);
-    }
+    logs.push(`Saved: ${savedCount}`);
+    logs.push(`Images from feed: ${feedImageCount}`);
+    logs.push(`Images from page: ${pageImageCount}`);
+    logs.push(`Images kept from existing rows: ${existingImageCount}`);
+    logs.push(`No image found: ${noImageCount}`);
+    logs.push(`Errors: ${errorCount}`);
 
     return Response.json({ success: true, logs });
   } catch (err) {
