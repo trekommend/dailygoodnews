@@ -24,6 +24,17 @@ function slugify(text: string) {
     .replace(/-+/g, "-");
 }
 
+function makeUniqueSlug(title: string, sourceUrl: string) {
+  const base = slugify(title);
+  const suffix = sourceUrl
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/[^a-z0-9]/g, "")
+    .slice(-8);
+
+  return `${base}-${suffix}`;
+}
+
 function guessCategory(title: string, summary: string) {
   const text = `${title} ${summary}`.toLowerCase();
 
@@ -50,9 +61,6 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push(`SUPABASE URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`);
-    logs.push("Target table: stories");
-
     const parser = new Parser<any, FeedItem>({
       customFields: {
         item: [
@@ -68,7 +76,8 @@ export async function GET() {
       "https://www.positive.news/feed/",
     ];
 
-    let lastSourceUrl = "";
+    logs.push(`SUPABASE URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`);
+    logs.push("Target table: stories");
 
     for (const feedUrl of feeds) {
       const feed = await parser.parseURL(feedUrl);
@@ -84,10 +93,8 @@ export async function GET() {
           const sourceUrl = item.link ?? "";
           const publishDate = item.pubDate ?? new Date().toISOString();
           const imageUrl = extractImage(item);
-          const slug = slugify(title);
+          const slug = makeUniqueSlug(title, sourceUrl);
           const categorySlug = guessCategory(title, summary);
-
-          lastSourceUrl = sourceUrl;
 
           const story = {
             title,
@@ -101,14 +108,18 @@ export async function GET() {
             publish_date: publishDate,
           };
 
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from("stories")
-            .upsert(story, { onConflict: "source_url" });
+            .upsert(story, { onConflict: "source_url" })
+            .select("id, title, source_url, publish_date, image_url")
+            .single();
 
           if (error) {
             logs.push(`Upsert error: ${error.message}`);
           } else {
-            logs.push(`Inserted/updated: ${title}`);
+            logs.push(
+              `Saved row: ${data.title} | publish_date: ${data.publish_date} | image: ${data.image_url ? "yes" : "no"}`
+            );
           }
         } catch (err) {
           logs.push(`Upsert error: ${String(err)}`);
@@ -124,25 +135,6 @@ export async function GET() {
       logs.push(`Count error: ${countError.message}`);
     } else {
       logs.push(`Stories row count: ${count}`);
-    }
-
-    if (lastSourceUrl) {
-      const { data: sample, error: sampleError } = await supabase
-        .from("stories")
-        .select("title, slug, source_url, publish_date, image_url, created_at")
-        .eq("source_url", lastSourceUrl)
-        .maybeSingle();
-
-      if (sampleError) {
-        logs.push(`Sample lookup error: ${sampleError.message}`);
-      } else {
-        logs.push(`Sample lookup found: ${sample ? "yes" : "no"}`);
-        if (sample) {
-          logs.push(`Sample title: ${sample.title}`);
-          logs.push(`Sample publish_date: ${sample.publish_date}`);
-          logs.push(`Sample image_url: ${sample.image_url ? "yes" : "no"}`);
-        }
-      }
     }
 
     return Response.json({ success: true, logs });
