@@ -28,6 +28,45 @@ async function getStory(slug: string): Promise<Story | null> {
   return (data as Story | null) ?? null;
 }
 
+function stripHtml(html: string) {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function decodeHtmlEntities(text: string) {
+  return text
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"')
+    .replace(/&#8230;/g, "...")
+    .replace(/&#8242;/g, "'")
+    .replace(/&#8243;/g, '"')
+    .replace(/&#038;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+function cleanStoryText(text: string) {
+  return decodeHtmlEntities(stripHtml(text))
+    .replace(/\[\u2026\]|\[\.\.\.\]/g, "")
+    .replace(/The post .*? appeared first on .*?\.?/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeForComparison(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 export async function generateMetadata({
   params,
 }: StoryPageProps): Promise<Metadata> {
@@ -40,13 +79,11 @@ export async function generateMetadata({
     };
   }
 
-  const description =
-    (story.summary ?? story.content ?? "").replace(/<[^>]*>/g, "").slice(0, 160) ||
-    "A positive news story from Daily Good News.";
+  const description = cleanStoryText(story.summary ?? story.content ?? "").slice(0, 160);
 
   return {
     title: `${story.title} | Daily Good News`,
-    description,
+    description: description || "A positive news story from Daily Good News.",
     openGraph: {
       title: story.title,
       description,
@@ -74,10 +111,19 @@ export default async function StoryPage({ params }: StoryPageProps) {
     );
   }
 
-  const bodyText = (story.content ?? story.summary ?? "").replace(/<[^>]*>/g, "");
+  const summaryText = cleanStoryText(story.summary ?? "");
+  const contentText = cleanStoryText(story.content ?? "");
   const formattedDate = story.publish_date
     ? new Date(story.publish_date).toLocaleDateString()
     : null;
+
+  const normalizedSummary = normalizeForComparison(summaryText);
+  const normalizedContent = normalizeForComparison(contentText);
+
+  const showBody =
+    !!contentText &&
+    normalizedContent.length > normalizedSummary.length + 40 &&
+    !normalizedContent.startsWith(normalizedSummary);
 
   return (
     <article style={{ maxWidth: 760, margin: "0 auto", padding: 40 }}>
@@ -91,9 +137,9 @@ export default async function StoryPage({ params }: StoryPageProps) {
           {story.title}
         </h1>
 
-        {story.summary ? (
+        {summaryText ? (
           <p style={{ fontSize: 18, color: "#475569", lineHeight: 1.6 }}>
-            {story.summary}
+            {summaryText}
           </p>
         ) : null}
       </div>
@@ -120,16 +166,18 @@ export default async function StoryPage({ params }: StoryPageProps) {
         </div>
       ) : null}
 
-      <div
-        style={{
-          fontSize: 18,
-          lineHeight: 1.8,
-          color: "#0f172a",
-          whiteSpace: "pre-line",
-        }}
-      >
-        {bodyText}
-      </div>
+      {showBody ? (
+        <div
+          style={{
+            fontSize: 18,
+            lineHeight: 1.8,
+            color: "#0f172a",
+            whiteSpace: "pre-line",
+          }}
+        >
+          {contentText}
+        </div>
+      ) : null}
 
       <div
         style={{
