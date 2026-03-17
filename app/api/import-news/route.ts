@@ -54,22 +54,66 @@ function absoluteUrl(url: string, baseUrl: string) {
   }
 }
 
-function extractImageFromFeed(item: FeedItem): string | null {
+function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
+  if (!url) return null;
+  const cleaned = absoluteUrl(url.trim(), baseUrl);
+  if (!/^https?:\/\//i.test(cleaned)) return null;
+  return cleaned;
+}
+
+function extractImageFromFeed(item: FeedItem, sourceUrl: string): string | null {
   return (
-    item.enclosure?.url ||
-    item["media:content"]?.$?.url ||
-    item["media:thumbnail"]?.$?.url ||
-    item.content?.match(/<img[^>]+src="([^"]+)"/i)?.[1] ||
-    item["content:encoded"]?.match(/<img[^>]+src="([^"]+)"/i)?.[1] ||
+    cleanImageUrl(item.enclosure?.url, sourceUrl) ||
+    cleanImageUrl(item["media:content"]?.$?.url, sourceUrl) ||
+    cleanImageUrl(item["media:thumbnail"]?.$?.url, sourceUrl) ||
+    cleanImageUrl(item.content?.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1], sourceUrl) ||
+    cleanImageUrl(item["content:encoded"]?.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1], sourceUrl) ||
     null
   );
+}
+
+function extractBestImageFromHtml(html: string, articleUrl: string): string | null {
+  const patterns = [
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i,
+    /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/i,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i,
+    /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image:src["'][^>]*>/i,
+    /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["'][^>]*>/i,
+    /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']image_src["'][^>]*>/i,
+    /<img[^>]+data-lazy-src=["']([^"']+)["']/i,
+    /<img[^>]+data-src=["']([^"']+)["']/i,
+    /<img[^>]+srcset=["']([^"']+)["']/i,
+    /<img[^>]+src=["']([^"']+)["']/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern)?.[1];
+    if (!match) continue;
+
+    let candidate = match;
+
+    if (pattern.source.includes("srcset")) {
+      candidate = match.split(",")[0]?.trim().split(" ")[0] ?? "";
+    }
+
+    const cleaned = cleanImageUrl(candidate, articleUrl);
+    if (cleaned) return cleaned;
+  }
+
+  return null;
 }
 
 async function extractImageFromArticlePage(articleUrl: string): Promise<string | null> {
   try {
     const response = await fetch(articleUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 DailyGoodNewsBot/1.0",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari DailyGoodNewsBot/1.0",
+        Accept: "text/html,application/xhtml+xml",
       },
       cache: "no-store",
     });
@@ -77,37 +121,7 @@ async function extractImageFromArticlePage(articleUrl: string): Promise<string |
     if (!response.ok) return null;
 
     const html = await response.text();
-
-    const ogImage =
-      html.match(
-        /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
-      )?.[1] ||
-      html.match(
-        /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i
-      )?.[1];
-
-    if (ogImage) {
-      return absoluteUrl(ogImage, articleUrl);
-    }
-
-    const twitterImage =
-      html.match(
-        /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i
-      )?.[1] ||
-      html.match(
-        /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i
-      )?.[1];
-
-    if (twitterImage) {
-      return absoluteUrl(twitterImage, articleUrl);
-    }
-
-    const firstImg = html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1];
-    if (firstImg) {
-      return absoluteUrl(firstImg, articleUrl);
-    }
-
-    return null;
+    return extractBestImageFromHtml(html, articleUrl);
   } catch {
     return null;
   }
@@ -132,6 +146,7 @@ export async function GET() {
       "https://www.positive.news/feed/",
     ];
 
+    logs.push(`SUPABASE URL: ${process.env.NEXT_PUBLIC_SUPABASE_URL}`);
     logs.push("Target table: stories");
 
     for (const feedUrl of feeds) {
@@ -148,16 +163,39 @@ export async function GET() {
           const sourceUrl = item.link ?? "";
           const publishDate = item.pubDate ?? new Date().toISOString();
 
-          let imageUrl = extractImageFromFeed(item);
-          let imageSource = "feed";
-
-          if (!imageUrl && sourceUrl) {
-            imageUrl = await extractImageFromArticlePage(sourceUrl);
-            imageSource = imageUrl ? "page" : "none";
+          if (!sourceUrl) {
+            logs.push(`Skipped row with missing source URL: ${title}`);
+            continue;
           }
 
           const slug = makeUniqueSlug(title, sourceUrl);
           const categorySlug = guessCategory(title, summary);
+
+          const { data: existingRow, error: existingError } = await supabase
+            .from("stories")
+            .select("id, image_url")
+            .eq("source_url", sourceUrl)
+            .maybeSingle();
+
+          if (existingError) {
+            logs.push(`Existing lookup error: ${existingError.message}`);
+          }
+
+          let imageUrl = extractImageFromFeed(item, sourceUrl);
+          let imageSource = imageUrl ? "feed" : "none";
+
+          if (!imageUrl) {
+            const scrapedImage = await extractImageFromArticlePage(sourceUrl);
+            if (scrapedImage) {
+              imageUrl = scrapedImage;
+              imageSource = "page";
+            }
+          }
+
+          if (!imageUrl && existingRow?.image_url) {
+            imageUrl = existingRow.image_url;
+            imageSource = "existing";
+          }
 
           const story = {
             title,
