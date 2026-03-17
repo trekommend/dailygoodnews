@@ -332,6 +332,8 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
+    logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
+
     const parser = new Parser<any, FeedItem>({
       customFields: {
         item: [
