@@ -61,6 +61,86 @@ function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
   return cleaned;
 }
 
+function decodeHtmlEntities(text: string) {
+  return text
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"')
+    .replace(/&#8230;/g, "...")
+    .replace(/&#8242;/g, "'")
+    .replace(/&#8243;/g, '"')
+    .replace(/&#038;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+function stripHtml(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n\s+/g, "\n");
+}
+
+function cleanStoryText(text: string) {
+  return decodeHtmlEntities(stripHtml(text))
+    .replace(/\[\u2026\]|\[\.\.\.\]/g, "")
+    .replace(/The post .*? appeared first on .*?\.?/gi, "")
+    .replace(/Continue reading.*$/gi, "")
+    .replace(/Read more.*$/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeForComparison(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function chooseBestContent(summary: string, rawContent: string) {
+  const cleanedSummary = cleanStoryText(summary);
+  const cleanedContent = cleanStoryText(rawContent);
+
+  if (!cleanedContent) {
+    return {
+      summary: cleanedSummary,
+      content: cleanedSummary,
+    };
+  }
+
+  const normalizedSummary = normalizeForComparison(cleanedSummary);
+  const normalizedContent = normalizeForComparison(cleanedContent);
+
+  const contentIsMostlySame =
+    !!normalizedSummary &&
+    (normalizedContent === normalizedSummary ||
+      normalizedContent.startsWith(normalizedSummary) ||
+      normalizedSummary.startsWith(normalizedContent));
+
+  if (contentIsMostlySame) {
+    return {
+      summary: cleanedSummary,
+      content: cleanedSummary,
+    };
+  }
+
+  return {
+    summary: cleanedSummary,
+    content: cleanedContent,
+  };
+}
+
 function extractImageFromFeed(item: FeedItem, sourceUrl: string): string | null {
   return (
     cleanImageUrl(item.enclosure?.url, sourceUrl) ||
@@ -160,13 +240,14 @@ export async function GET() {
       for (const item of feed.items.slice(0, 10)) {
         try {
           const title = item.title ?? "Untitled";
-          const summary = item.contentSnippet ?? "";
-          const content = item["content:encoded"] ?? item.content ?? summary;
+          const rawSummary = item.contentSnippet ?? "";
+          const rawContent = item["content:encoded"] ?? item.content ?? rawSummary;
           const sourceUrl = item.link ?? "";
           const publishDate = item.pubDate ?? new Date().toISOString();
 
           if (!sourceUrl) continue;
 
+          const { summary, content } = chooseBestContent(rawSummary, rawContent);
           const slug = makeUniqueSlug(title, sourceUrl);
           const categorySlug = guessCategory(title, summary);
 
