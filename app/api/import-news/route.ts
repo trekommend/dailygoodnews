@@ -53,12 +53,6 @@ const FEED_SOURCES: FeedSource[] = [
     defaultCategory: "community",
     weight: 2,
   },
-  {
-    name: "Washington Post Lifestyle",
-    url: "https://feeds.washingtonpost.com/rss/lifestyle",
-    defaultCategory: "community",
-    weight: 2,
-  },
 ];
 
 function slugify(text: string) {
@@ -316,6 +310,9 @@ function extractBestImageFromHtml(html: string, articleUrl: string): string | nu
 
 async function extractImageFromArticlePage(articleUrl: string): Promise<string | null> {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+
     const response = await fetch(articleUrl, {
       headers: {
         "User-Agent":
@@ -323,7 +320,10 @@ async function extractImageFromArticlePage(articleUrl: string): Promise<string |
         Accept: "text/html,application/xhtml+xml",
       },
       cache: "no-store",
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) return null;
 
@@ -367,7 +367,7 @@ export async function GET() {
         const feed = await parser.parseURL(source.url);
         logs.push(`Feed: ${source.name} (${feed.items.length} items)`);
 
-        for (const item of feed.items.slice(0, 10)) {
+        for (const item of feed.items.slice(0, 5)) {
           try {
             const title = item.title ?? "Untitled";
             const rawSummary = item.contentSnippet ?? "";
