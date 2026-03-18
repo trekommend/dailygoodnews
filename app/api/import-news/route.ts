@@ -53,6 +53,12 @@ const FEED_SOURCES: FeedSource[] = [
     defaultCategory: "community",
     weight: 2,
   },
+  {
+    name: "Washington Post Lifestyle",
+    url: "https://feeds.washingtonpost.com/rss/lifestyle",
+    defaultCategory: "community",
+    weight: 2,
+  },
 ];
 
 function slugify(text: string) {
@@ -353,6 +359,10 @@ export async function GET() {
     let errorCount = 0;
 
     for (const source of FEED_SOURCES) {
+      let sourceSaved = 0;
+      let sourceSkipped = 0;
+      let sourceErrors = 0;
+
       try {
         const feed = await parser.parseURL(source.url);
         logs.push(`Feed: ${source.name} (${feed.items.length} items)`);
@@ -371,6 +381,7 @@ export async function GET() {
 
             if (!shouldImportStory(title, summary, source.weight ?? 1)) {
               skippedCount += 1;
+              sourceSkipped += 1;
               continue;
             }
 
@@ -418,11 +429,13 @@ export async function GET() {
 
             if (error) {
               errorCount += 1;
+              sourceErrors += 1;
               logs.push(`Error saving "${title}": ${error.message}`);
               continue;
             }
 
             savedCount += 1;
+            sourceSaved += 1;
 
             if (imageSource === "feed") feedImageCount += 1;
             else if (imageSource === "page") pageImageCount += 1;
@@ -430,11 +443,17 @@ export async function GET() {
             else noImageCount += 1;
           } catch (err) {
             errorCount += 1;
+            sourceErrors += 1;
             logs.push(`Error saving item from ${source.name}: ${String(err)}`);
           }
         }
+
+        logs.push(
+          `${source.name} → saved: ${sourceSaved}, skipped: ${sourceSkipped}, errors: ${sourceErrors}`
+        );
       } catch (err) {
         errorCount += 1;
+        sourceErrors += 1;
         logs.push(`Error reading feed ${source.name}: ${String(err)}`);
       }
     }
