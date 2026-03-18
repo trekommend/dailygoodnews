@@ -35,24 +35,6 @@ const FEED_SOURCES: FeedSource[] = [
     defaultCategory: "hope",
     weight: 3,
   },
-  {
-    name: "Fox News Health",
-    url: "https://moxie.foxnews.com/google-publisher/health.xml",
-    defaultCategory: "health",
-    weight: 2,
-  },
-  {
-    name: "Fox News Science",
-    url: "https://moxie.foxnews.com/google-publisher/science.xml",
-    defaultCategory: "hope",
-    weight: 2,
-  },
-  {
-    name: "Fox News Travel",
-    url: "https://moxie.foxnews.com/google-publisher/travel.xml",
-    defaultCategory: "community",
-    weight: 2,
-  },
 ];
 
 function slugify(text: string) {
@@ -309,10 +291,10 @@ function extractBestImageFromHtml(html: string, articleUrl: string): string | nu
 }
 
 async function extractImageFromArticlePage(articleUrl: string): Promise<string | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
 
+  try {
     const response = await fetch(articleUrl, {
       headers: {
         "User-Agent":
@@ -323,14 +305,14 @@ async function extractImageFromArticlePage(articleUrl: string): Promise<string |
       signal: controller.signal,
     });
 
-    clearTimeout(timeout);
-
     if (!response.ok) return null;
 
     const html = await response.text();
     return extractBestImageFromHtml(html, articleUrl);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -367,7 +349,7 @@ export async function GET() {
         const feed = await parser.parseURL(source.url);
         logs.push(`Feed: ${source.name} (${feed.items.length} items)`);
 
-        for (const item of feed.items.slice(0, 5)) {
+        for (const item of feed.items.slice(0, 2)) {
           try {
             const title = item.title ?? "Untitled";
             const rawSummary = item.contentSnippet ?? "";
