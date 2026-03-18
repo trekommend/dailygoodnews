@@ -35,6 +35,30 @@ const FEED_SOURCES: FeedSource[] = [
     defaultCategory: "hope",
     weight: 3,
   },
+  {
+    name: "Fox News Health",
+    url: "https://moxie.foxnews.com/google-publisher/health.xml",
+    defaultCategory: "health",
+    weight: 2,
+  },
+  {
+    name: "Fox News Science",
+    url: "https://moxie.foxnews.com/google-publisher/science.xml",
+    defaultCategory: "hope",
+    weight: 2,
+  },
+  {
+    name: "Fox News Travel",
+    url: "https://moxie.foxnews.com/google-publisher/travel.xml",
+    defaultCategory: "community",
+    weight: 2,
+  },
+  {
+    name: "Washington Post Lifestyle",
+    url: "https://feeds.washingtonpost.com/rss/lifestyle",
+    defaultCategory: "community",
+    weight: 2,
+  },
 ];
 
 function slugify(text: string) {
