@@ -59,6 +59,12 @@ const FEED_SOURCES: FeedSource[] = [
     defaultCategory: "community",
     weight: 2,
   },
+  {
+  name: "Washington Post Technology",
+  url: "https://feeds.washingtonpost.com/rss/business/technology",
+  defaultCategory: "hope",
+  weight: 2,
+},
 ];
 
 function slugify(text: string) {
