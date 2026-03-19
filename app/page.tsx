@@ -148,15 +148,15 @@ export default async function HomePage() {
                 <img
                   src={featuredStory.image_url}
                   alt={featuredStory.title}
-                  className="h-[380px] w-full object-cover"
+                  className="h-[300px] w-full object-cover"
                 />
               ) : (
-                <div className="flex h-[380px] w-full items-center justify-center bg-gray-100 text-gray-400">
+                <div className="flex h-[300px] w-full items-center justify-center bg-gray-100 text-gray-400">
                   No image available
                 </div>
               )}
 
-              <div className="p-6 md:p-8">
+              <div className="p-6 md:p-7">
                 <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
                   <span
                     className={`rounded-full px-3 py-1 font-medium ${categoryClasses(
@@ -177,7 +177,7 @@ export default async function HomePage() {
                   {featuredStory.title}
                 </h3>
 
-                <p className="mt-4 max-w-3xl text-lg text-gray-700 line-clamp-4">
+                <p className="mt-4 max-w-3xl text-lg text-gray-700 line-clamp-3">
                   {featuredStory.summary}
                 </p>
 
@@ -201,7 +201,7 @@ export default async function HomePage() {
         {remainingStories.length === 0 ? (
           <p className="text-gray-600">No stories found yet.</p>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2">
             {remainingStories.map((story: Story) => (
               <Link
                 key={story.id}
@@ -212,10 +212,10 @@ export default async function HomePage() {
                   <img
                     src={story.image_url}
                     alt={story.title}
-                    className="h-56 w-full object-cover"
+                    className="h-44 w-full object-cover"
                   />
                 ) : (
-                  <div className="flex h-56 w-full items-center justify-center bg-gray-100 text-gray-400">
+                  <div className="flex h-44 w-full items-center justify-center bg-gray-100 text-gray-400">
                     No image
                   </div>
                 )}
