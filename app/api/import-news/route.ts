@@ -20,6 +20,13 @@ type FeedSource = {
   url: string;
   defaultCategory: string;
   weight?: number;
+  batchSize?: number;
+};
+
+type ImportDecision = {
+  accepted: boolean;
+  score: number;
+  reason: string;
 };
 
 const FEED_SOURCES: FeedSource[] = [
@@ -28,43 +35,126 @@ const FEED_SOURCES: FeedSource[] = [
     url: "https://www.goodnewsnetwork.org/feed/",
     defaultCategory: "hope",
     weight: 3,
+    batchSize: 5,
   },
   {
     name: "Positive News",
     url: "https://www.positive.news/feed/",
     defaultCategory: "hope",
     weight: 3,
+    batchSize: 5,
   },
   {
     name: "Fox News Health",
     url: "https://moxie.foxnews.com/google-publisher/health.xml",
     defaultCategory: "health",
     weight: 2,
+    batchSize: 5,
   },
   {
     name: "Fox News Science",
     url: "https://moxie.foxnews.com/google-publisher/science.xml",
     defaultCategory: "hope",
     weight: 2,
+    batchSize: 5,
   },
   {
     name: "Fox News Travel",
     url: "https://moxie.foxnews.com/google-publisher/travel.xml",
     defaultCategory: "community",
     weight: 2,
+    batchSize: 3,
   },
   {
     name: "Washington Post Lifestyle",
     url: "https://feeds.washingtonpost.com/rss/lifestyle",
     defaultCategory: "community",
     weight: 2,
+    batchSize: 3,
   },
-  {
-  name: "Washington Post Technology",
-  url: "https://feeds.washingtonpost.com/rss/business/technology",
-  defaultCategory: "hope",
-  weight: 2,
-},
+];
+
+const STRONG_POSITIVE_PATTERNS = [
+  /scientists?\s+(develop|discover|create|design)/i,
+  /(new\s+)?treatment\s+(helps|improves|reduces|boosts)/i,
+  /(community|volunteers?|neighbors?)\s+(help|support|rebuild|restore)/i,
+  /(rescued|saved|recovered|restored|improved)/i,
+  /(breakthrough|innovation|milestone|record low)/i,
+  /(conservation|wildlife)\s+(effort|success|recovery|protection)/i,
+  /(donation|fundraiser|charity)\s+(helps|supports|raises)/i,
+];
+
+const POSITIVE_PATTERNS = [
+  /breakthrough/i,
+  /recovery/i,
+  /rescued?/i,
+  /saved?/i,
+  /helped?/i,
+  /protect(ed|ion)/i,
+  /restor(ed|ation)/i,
+  /improv(ed|ement)/i,
+  /reduc(ed|tion)/i,
+  /community/i,
+  /volunteer/i,
+  /donat(ed|ion)/i,
+  /fundraiser/i,
+  /innovation/i,
+  /clean energy/i,
+  /solar/i,
+  /wildlife/i,
+  /conservation/i,
+  /health/i,
+  /wellness/i,
+  /hope/i,
+  /uplift/i,
+  /kindness/i,
+  /success/i,
+  /recycling/i,
+  /inspiring/i,
+  /uplifting/i,
+  /heartwarming/i,
+  /support/i,
+  /access/i,
+  /benefit/i,
+  /progress/i,
+  /healing/i,
+];
+
+const STRONG_NEGATIVE_PATTERNS = [
+  /murder/i,
+  /shooting/i,
+  /terror/i,
+  /hostage/i,
+  /rape/i,
+  /abuse/i,
+  /bomb/i,
+  /\bwar\b/i,
+  /deadly/i,
+  /massacre/i,
+];
+
+const NEGATIVE_PATTERNS = [
+  /killed?/i,
+  /crash/i,
+  /scandal/i,
+  /fraud/i,
+  /arrest/i,
+  /lawsuit/i,
+  /indict/i,
+  /outrage/i,
+  /attack/i,
+  /disaster/i,
+  /explosion/i,
+  /partisan/i,
+  /election/i,
+  /trump/i,
+  /biden/i,
+  /conflict/i,
+  /crime/i,
+  /violent/i,
+  /devastat(ed|ing)/i,
+  /fear/i,
+  /panic/i,
 ];
 
 function slugify(text: string) {
@@ -183,7 +273,13 @@ function chooseBestContent(summary: string, rawContent: string) {
 }
 
 function guessCategory(title: string, summary: string, fallback = "hope") {
+  const titleText = title.toLowerCase();
   const text = `${title} ${summary}`.toLowerCase();
+
+  if (/animal|bird|dog|cat|wildlife|species|zoo/.test(titleText)) return "animals";
+  if (/health|hospital|medical|therapy|wellness|patient/.test(titleText)) return "health";
+  if (/community|school|volunteer|neighbors|family|town|city|teacher/.test(titleText)) return "community";
+  if (/kindness|charity|helped|donated|gift|fundraiser|support/.test(titleText)) return "kindness";
 
   if (/animal|bird|dog|cat|wildlife|species|zoo/.test(text)) return "animals";
   if (/health|hospital|medical|therapy|wellness|mental health|patient/.test(text)) return "health";
@@ -193,85 +289,72 @@ function guessCategory(title: string, summary: string, fallback = "hope") {
   return fallback;
 }
 
-function positivityScore(title: string, summary: string, sourceWeight = 1) {
-  const text = `${title} ${summary}`.toLowerCase();
+function scoreText(text: string) {
+  let score = 0;
 
-  const positivePatterns = [
-    /breakthrough/,
-    /recovery/,
-    /rescued?/,
-    /saved?/,
-    /helped?/,
-    /protect(ed|ion)/,
-    /restor(ed|ation)/,
-    /improv(ed|ement)/,
-    /reduc(ed|tion)/,
-    /community/,
-    /volunteer/,
-    /donat(ed|ion)/,
-    /fundraiser/,
-    /innovation/,
-    /clean energy/,
-    /solar/,
-    /wildlife/,
-    /conservation/,
-    /health/,
-    /wellness/,
-    /hope/,
-    /uplift/,
-    /kindness/,
-    /success/,
-    /record low/,
-    /decline in pollution/,
-    /recycling/,
-    /debunked/,
-    /inspiring/,
-    /uplifting/,
-    /heartwarming/,
-  ];
-
-  const negativePatterns = [
-    /killed?/,
-    /murder/,
-    /shooting/,
-    /war/,
-    /bomb/,
-    /crash/,
-    /scandal/,
-    /fraud/,
-    /arrest/,
-    /lawsuit/,
-    /indict/,
-    /outrage/,
-    /attack/,
-    /deadly/,
-    /disaster/,
-    /explosion/,
-    /hostage/,
-    /terror/,
-    /rape/,
-    /abuse/,
-    /partisan/,
-    /election/,
-    /trump/,
-    /biden/,
-  ];
-
-  let score = sourceWeight;
-
-  for (const pattern of positivePatterns) {
-    if (pattern.test(text)) score += 2;
+  for (const pattern of STRONG_POSITIVE_PATTERNS) {
+    if (pattern.test(text)) score += 4;
   }
 
-  for (const pattern of negativePatterns) {
-    if (pattern.test(text)) score -= 3;
+  for (const pattern of POSITIVE_PATTERNS) {
+    if (pattern.test(text)) score += 1;
+  }
+
+  for (const pattern of STRONG_NEGATIVE_PATTERNS) {
+    if (pattern.test(text)) score -= 6;
+  }
+
+  for (const pattern of NEGATIVE_PATTERNS) {
+    if (pattern.test(text)) score -= 2;
   }
 
   return score;
 }
 
-function shouldImportStory(title: string, summary: string, sourceWeight = 1) {
-  return positivityScore(title, summary, sourceWeight) >= 2;
+function decideImportStory(
+  title: string,
+  summary: string,
+  content: string,
+  sourceWeight = 1
+): ImportDecision {
+  const titleText = title || "";
+  const summaryText = summary || "";
+  const contentText = content || "";
+
+  const combinedHeadline = `${titleText} ${summaryText}`.trim();
+
+  const headlineScore = scoreText(combinedHeadline);
+  const weightedHeadlineScore = headlineScore + sourceWeight;
+
+  if (weightedHeadlineScore >= 3) {
+    return {
+      accepted: true,
+      score: weightedHeadlineScore,
+      reason: "accepted from title/summary",
+    };
+  }
+
+  if (weightedHeadlineScore <= -3) {
+    return {
+      accepted: false,
+      score: weightedHeadlineScore,
+      reason: "rejected from title/summary",
+    };
+  }
+
+  const shortenedContent = contentText.slice(0, 1200);
+  const contentScore = scoreText(shortenedContent);
+
+  const finalScore =
+    sourceWeight +
+    headlineScore * 2 +
+    Math.round(contentScore * 0.5);
+
+  return {
+    accepted: finalScore >= 3,
+    score: finalScore,
+    reason: finalScore >= 3 ? "accepted after content check" : "rejected after content check",
+  };
 }
 
 function extractImageFromFeed(item: FeedItem, sourceUrl: string): string | null {
@@ -350,7 +433,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push("IMPORTER_VERSION: batch-size-5-wapo-live");
+    logs.push("IMPORTER_VERSION: scored-filter-batchsize-v1");
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
@@ -379,9 +462,13 @@ export async function GET() {
       try {
         const feed = await parser.parseURL(source.url);
         logs.push(`Feed: ${source.name} (${feed.items.length} items)`);
-        logs.push(`Batch size test for ${source.name}: ${feed.items.slice(0, 5).length}`);
 
-        for (const item of feed.items.slice(0, 5)) {
+        const batchSize = source.batchSize ?? 5;
+        const batchItems = feed.items.slice(0, batchSize);
+
+        logs.push(`Batch size for ${source.name}: ${batchItems.length}`);
+
+        for (const item of batchItems) {
           try {
             const title = item.title ?? "Untitled";
             const rawSummary = item.contentSnippet ?? "";
@@ -393,9 +480,19 @@ export async function GET() {
 
             const { summary, content } = chooseBestContent(rawSummary, rawContent);
 
-            if (!shouldImportStory(title, summary, source.weight ?? 1)) {
+            const decision = decideImportStory(
+              title,
+              summary,
+              content,
+              source.weight ?? 1
+            );
+
+            if (!decision.accepted) {
               skippedCount += 1;
               sourceSkipped += 1;
+              logs.push(
+                `Skipped "${title}" from ${source.name} (${decision.reason}, score=${decision.score})`
+              );
               continue;
             }
 
@@ -467,7 +564,6 @@ export async function GET() {
         );
       } catch (err) {
         errorCount += 1;
-        sourceErrors += 1;
         logs.push(`Error reading feed ${source.name}: ${String(err)}`);
       }
     }
