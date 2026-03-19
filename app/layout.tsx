@@ -8,38 +8,85 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="overflow-x-hidden bg-gray-50 text-gray-900">
-        <header className="border-b border-gray-200 bg-white">
-          <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-4 sm:px-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Link href="/" className="text-xl font-bold tracking-tight">
+      <body
+        style={{
+          margin: 0,
+          overflowX: "hidden",
+          background: "#f9fafb",
+          color: "#111827",
+          fontFamily:
+            'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        }}
+      >
+        <header
+          style={{
+            borderBottom: "1px solid #e5e7eb",
+            background: "#ffffff",
+          }}
+        >
+          <nav
+            style={{
+              maxWidth: 1100,
+              margin: "0 auto",
+              padding: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              boxSizing: "border-box",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <Link
+                href="/"
+                style={{
+                  fontWeight: 700,
+                  fontSize: 22,
+                  textDecoration: "none",
+                  color: "#111827",
+                }}
+              >
                 Daily Good News 🌤️
               </Link>
 
-              <div className="flex flex-wrap gap-4 text-sm">
-                <Link href="/stories" className="hover:underline">
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                <Link href="/stories" style={{ textDecoration: "none", color: "#111827" }}>
                   Stories
                 </Link>
-                <Link href="/submit" className="hover:underline">
+                <Link href="/submit" style={{ textDecoration: "none", color: "#111827" }}>
                   Submit
                 </Link>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3 text-sm text-gray-600">
-              <Link href="/category/kindness" className="hover:underline">
+            <div
+              style={{
+                display: "flex",
+                gap: 14,
+                flexWrap: "wrap",
+                fontSize: 14,
+              }}
+            >
+              <Link href="/category/kindness" style={{ textDecoration: "none", color: "#4b5563" }}>
                 Kindness
               </Link>
-              <Link href="/category/community" className="hover:underline">
+              <Link href="/category/community" style={{ textDecoration: "none", color: "#4b5563" }}>
                 Community
               </Link>
-              <Link href="/category/animals" className="hover:underline">
+              <Link href="/category/animals" style={{ textDecoration: "none", color: "#4b5563" }}>
                 Animals
               </Link>
-              <Link href="/category/health" className="hover:underline">
+              <Link href="/category/health" style={{ textDecoration: "none", color: "#4b5563" }}>
                 Health
               </Link>
-              <Link href="/category/hope" className="hover:underline">
+              <Link href="/category/hope" style={{ textDecoration: "none", color: "#4b5563" }}>
                 Hope
               </Link>
             </div>

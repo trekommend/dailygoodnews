@@ -42,24 +42,23 @@ function categoryLabel(category: string) {
   }
 }
 
-function categoryClasses(category: string) {
+function categoryColors(category: string) {
   switch (category) {
     case "health":
-      return "bg-green-100 text-green-800";
+      return { background: "#dcfce7", color: "#166534" };
     case "community":
-      return "bg-blue-100 text-blue-800";
+      return { background: "#dbeafe", color: "#1d4ed8" };
     case "kindness":
-      return "bg-pink-100 text-pink-800";
+      return { background: "#fce7f3", color: "#be185d" };
     case "animals":
-      return "bg-amber-100 text-amber-800";
+      return { background: "#fef3c7", color: "#b45309" };
     default:
-      return "bg-yellow-100 text-yellow-800";
+      return { background: "#fef9c3", color: "#a16207" };
   }
 }
 
 export default async function HomePage() {
   const recentCutoff = getRecentCutoffIso(2);
-
   const selectFields =
     "id, title, slug, summary, image_url, source_name, publish_date, category_slug, story_score";
 
@@ -93,8 +92,10 @@ export default async function HomePage() {
 
   if (error) {
     return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-        <h1 className="mb-4 text-4xl font-bold">Daily Good News</h1>
+      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 16px" }}>
+        <h1 style={{ fontSize: 40, fontWeight: 700, marginBottom: 16 }}>
+          Daily Good News
+        </h1>
         <p>Could not load stories.</p>
       </main>
     );
@@ -104,62 +105,132 @@ export default async function HomePage() {
     stories?.filter((story: Story) => story.id !== featuredStory?.id) ?? [];
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight">Daily Good News</h1>
-        <p className="mt-2 max-w-2xl text-gray-600">
+    <main
+      style={{
+        maxWidth: 1100,
+        margin: "0 auto",
+        padding: "32px 16px",
+        width: "100%",
+        boxSizing: "border-box",
+        overflowX: "hidden",
+      }}
+    >
+      <header style={{ marginBottom: 32 }}>
+        <h1 style={{ fontSize: 40, fontWeight: 700, margin: 0 }}>
+          Daily Good News
+        </h1>
+        <p style={{ marginTop: 8, color: "#4b5563", maxWidth: 700 }}>
           Uplifting stories from health, science, kindness, community, and hope.
         </p>
       </header>
 
       {featuredStory && (
-        <section className="mb-10">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-2xl font-semibold">Top good news</h2>
-            <span className="text-sm text-gray-500">Featured story</span>
+        <section style={{ marginBottom: 40 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 16,
+              flexWrap: "wrap",
+            }}
+          >
+            <h2 style={{ fontSize: 28, fontWeight: 600, margin: 0 }}>
+              Top good news
+            </h2>
+            <span style={{ fontSize: 14, color: "#6b7280" }}>Featured story</span>
           </div>
 
-          <Link href={`/stories/${featuredStory.slug}`} className="block">
-            <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
+          <Link
+            href={`/stories/${featuredStory.slug}`}
+            style={{ display: "block", textDecoration: "none", color: "inherit" }}
+          >
+            <article
+              style={{
+                overflow: "hidden",
+                borderRadius: 20,
+                border: "1px solid #e5e7eb",
+                background: "#fff",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+              }}
+            >
               {featuredStory.image_url ? (
                 <img
                   src={featuredStory.image_url}
                   alt={featuredStory.title}
-                  className="block h-36 w-full object-cover sm:h-44"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    height: 180,
+                    objectFit: "cover",
+                  }}
                 />
               ) : (
-                <div className="flex h-36 w-full items-center justify-center bg-gray-100 text-gray-400 sm:h-44">
+                <div
+                  style={{
+                    height: 180,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "#f3f4f6",
+                    color: "#9ca3af",
+                  }}
+                >
                   No image available
                 </div>
               )}
 
-              <div className="p-5 sm:p-6">
-                <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+              <div style={{ padding: 24 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    alignItems: "center",
+                    marginBottom: 12,
+                    fontSize: 14,
+                  }}
+                >
                   <span
-                    className={`rounded-full px-3 py-1 font-medium ${categoryClasses(
-                      featuredStory.category_slug
-                    )}`}
+                    style={{
+                      ...categoryColors(featuredStory.category_slug),
+                      borderRadius: 999,
+                      padding: "6px 12px",
+                      fontWeight: 600,
+                    }}
                   >
                     {categoryLabel(featuredStory.category_slug)}
                   </span>
-                  <span className="text-gray-400">•</span>
-                  <span className="text-gray-600">{featuredStory.source_name}</span>
-                  <span className="text-gray-400">•</span>
-                  <span className="text-gray-600">
+                  <span style={{ color: "#9ca3af" }}>•</span>
+                  <span style={{ color: "#4b5563" }}>{featuredStory.source_name}</span>
+                  <span style={{ color: "#9ca3af" }}>•</span>
+                  <span style={{ color: "#4b5563" }}>
                     {formatDate(featuredStory.publish_date)}
                   </span>
                 </div>
 
-                <h3 className="text-2xl font-semibold leading-tight text-gray-900 hover:underline">
+                <h3
+                  style={{
+                    fontSize: 32,
+                    fontWeight: 600,
+                    lineHeight: 1.2,
+                    margin: 0,
+                    wordBreak: "break-word",
+                  }}
+                >
                   {featuredStory.title}
                 </h3>
 
-                <p className="mt-3 line-clamp-3 text-base text-gray-700">
+                <p
+                  style={{
+                    marginTop: 12,
+                    fontSize: 17,
+                    color: "#374151",
+                    lineHeight: 1.6,
+                  }}
+                >
                   {featuredStory.summary}
-                </p>
-
-                <p className="mt-4 text-sm font-medium text-gray-900">
-                  Read full story →
                 </p>
               </div>
             </article>
@@ -168,52 +239,127 @@ export default async function HomePage() {
       )}
 
       <section>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-2xl font-semibold">Latest uplifting stories</h2>
-          <span className="text-sm text-gray-500">Ranked by positivity and freshness</span>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <h2 style={{ fontSize: 28, fontWeight: 600, margin: 0 }}>
+            Latest uplifting stories
+          </h2>
+          <span style={{ fontSize: 14, color: "#6b7280" }}>
+            Ranked by positivity and freshness
+          </span>
         </div>
 
         {remainingStories.length === 0 ? (
-          <p className="text-gray-600">No stories found yet.</p>
+          <p style={{ color: "#4b5563" }}>No stories found yet.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 24,
+              width: "100%",
+            }}
+          >
             {remainingStories.map((story: Story) => (
-              <Link key={story.id} href={`/stories/${story.slug}`} className="block">
-                <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
+              <Link
+                key={story.id}
+                href={`/stories/${story.slug}`}
+                style={{ display: "block", textDecoration: "none", color: "inherit", minWidth: 0 }}
+              >
+                <article
+                  style={{
+                    overflow: "hidden",
+                    borderRadius: 20,
+                    border: "1px solid #e5e7eb",
+                    background: "#fff",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                    minWidth: 0,
+                  }}
+                >
                   {story.image_url ? (
                     <img
                       src={story.image_url}
                       alt={story.title}
-                      className="block h-24 w-full object-cover sm:h-28"
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        height: 110,
+                        objectFit: "cover",
+                      }}
                     />
                   ) : (
-                    <div className="flex h-24 w-full items-center justify-center bg-gray-100 text-gray-400 sm:h-28">
+                    <div
+                      style={{
+                        height: 110,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "#f3f4f6",
+                        color: "#9ca3af",
+                      }}
+                    >
                       No image
                     </div>
                   )}
 
-                  <div className="p-4">
-                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                  <div style={{ padding: 16, minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 8,
+                        alignItems: "center",
+                        marginBottom: 10,
+                        fontSize: 12,
+                      }}
+                    >
                       <span
-                        className={`rounded-full px-2.5 py-1 font-medium ${categoryClasses(
-                          story.category_slug
-                        )}`}
+                        style={{
+                          ...categoryColors(story.category_slug),
+                          borderRadius: 999,
+                          padding: "5px 10px",
+                          fontWeight: 600,
+                        }}
                       >
                         {categoryLabel(story.category_slug)}
                       </span>
-                      <span className="text-gray-400">•</span>
-                      <span className="text-gray-500">{story.source_name}</span>
+                      <span style={{ color: "#9ca3af" }}>•</span>
+                      <span style={{ color: "#6b7280" }}>{story.source_name}</span>
                     </div>
 
-                    <h3 className="line-clamp-2 text-lg font-semibold leading-snug text-gray-900 hover:underline">
+                    <h3
+                      style={{
+                        fontSize: 20,
+                        fontWeight: 600,
+                        lineHeight: 1.3,
+                        margin: 0,
+                        wordBreak: "break-word",
+                      }}
+                    >
                       {story.title}
                     </h3>
 
-                    <p className="mt-2 line-clamp-2 text-sm text-gray-700">
+                    <p
+                      style={{
+                        marginTop: 10,
+                        fontSize: 14,
+                        color: "#374151",
+                        lineHeight: 1.5,
+                        wordBreak: "break-word",
+                      }}
+                    >
                       {story.summary}
                     </p>
 
-                    <p className="mt-3 text-sm text-gray-500">
+                    <p style={{ marginTop: 12, fontSize: 14, color: "#6b7280" }}>
                       {formatDate(story.publish_date)}
                     </p>
                   </div>
