@@ -373,7 +373,7 @@ export async function GET() {
         const feed = await parser.parseURL(source.url);
         logs.push(`Feed: ${source.name} (${feed.items.length} items)`);
 
-        for (const item of feed.items.slice(0, 2)) {
+        for (const item of feed.items.slice(0, 5)) {
           try {
             const title = item.title ?? "Untitled";
             const rawSummary = item.contentSnippet ?? "";
