@@ -77,11 +77,12 @@ const FEED_SOURCES: FeedSource[] = [
 const STRONG_POSITIVE_PATTERNS = [
   /scientists?\s+(develop|discover|create|design)/i,
   /(new\s+)?treatment\s+(helps|improves|reduces|boosts)/i,
-  /(community|volunteers?|neighbors?)\s+(help|support|rebuild|restore)/i,
+  /(community|volunteers?|neighbors?|strangers?)\s+(help|support|rebuild|restore|show up|raise)/i,
   /(rescued|saved|recovered|restored|improved)/i,
   /(breakthrough|innovation|milestone|record low)/i,
   /(conservation|wildlife)\s+(effort|success|recovery|protection)/i,
-  /(donation|fundraiser|charity)\s+(helps|supports|raises)/i,
+  /(donation|fundraiser|charity|tips)\s+(helps|supports|raises|replaces)/i,
+  /(showed up with|raised|donated)\s+\$?\d+/i,
 ];
 
 const POSITIVE_PATTERNS = [
@@ -118,6 +119,9 @@ const POSITIVE_PATTERNS = [
   /benefit/i,
   /progress/i,
   /healing/i,
+  /celebrates?/i,
+  /generosity/i,
+  /compassion/i,
 ];
 
 const STRONG_NEGATIVE_PATTERNS = [
@@ -155,6 +159,12 @@ const NEGATIVE_PATTERNS = [
   /devastat(ed|ing)/i,
   /fear/i,
   /panic/i,
+  /crowds?/i,
+  /chaos/i,
+  /emergency/i,
+  /evacuation/i,
+  /stolen/i,
+  /explode|exploded/i,
 ];
 
 function slugify(text: string) {
@@ -350,6 +360,18 @@ function decideImportStory(
     headlineScore * 2 +
     Math.round(contentScore * 0.5);
 
+  const hasStrongPositive = STRONG_POSITIVE_PATTERNS.some((pattern) =>
+    pattern.test(combinedHeadline)
+  );
+
+  if (finalScore === 2 && !hasStrongPositive) {
+    return {
+      accepted: false,
+      score: finalScore,
+      reason: "rejected as neutral (no strong positive signal)",
+    };
+  }
+
   return {
     accepted: finalScore >= 2,
     score: finalScore,
@@ -433,7 +455,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push("IMPORTER_VERSION: scored-filter-batchsize-v1");
+    logs.push("IMPORTER_VERSION: scored-filter-batchsize-v3-neutral-filter");
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
