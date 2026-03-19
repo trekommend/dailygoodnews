@@ -344,6 +344,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
+    logs.push("IMPORTER_VERSION: batch-size-5-wapo-live");
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
@@ -372,6 +373,7 @@ export async function GET() {
       try {
         const feed = await parser.parseURL(source.url);
         logs.push(`Feed: ${source.name} (${feed.items.length} items)`);
+        logs.push(`Batch size test for ${source.name}: ${feed.items.slice(0, 5).length}`);
 
         for (const item of feed.items.slice(0, 5)) {
           try {
