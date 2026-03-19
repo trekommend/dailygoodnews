@@ -455,7 +455,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push("IMPORTER_VERSION: scored-filter-batchsize-v3-neutral-filter");
+    logs.push("IMPORTER_VERSION: scored-filter-v4-ranking");
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
@@ -543,6 +543,11 @@ export async function GET() {
               imageSource = "existing";
             }
 
+            const storyScore =
+              decision.score +
+              (imageUrl ? 2 : 0) +
+              (source.weight ?? 1);
+
             const story = {
               title,
               slug,
@@ -554,6 +559,8 @@ export async function GET() {
               source_name: source.name,
               source_url: sourceUrl,
               publish_date: publishDate,
+              positivity_score: decision.score,
+              story_score: storyScore,
             };
 
             const { error } = await supabase
