@@ -326,7 +326,7 @@ function decideImportStory(
   const headlineScore = scoreText(combinedHeadline);
   const weightedHeadlineScore = headlineScore + sourceWeight;
 
-  if (weightedHeadlineScore >= 3) {
+  if (weightedHeadlineScore >= 2) {
     return {
       accepted: true,
       score: weightedHeadlineScore,
@@ -351,9 +351,9 @@ function decideImportStory(
     Math.round(contentScore * 0.5);
 
   return {
-    accepted: finalScore >= 3,
+    accepted: finalScore >= 2,
     score: finalScore,
-    reason: finalScore >= 3 ? "accepted after content check" : "rejected after content check",
+    reason: finalScore >= 2 ? "accepted after content check" : "rejected after content check",
   };
 }
 
