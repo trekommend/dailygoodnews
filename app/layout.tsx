@@ -10,13 +10,9 @@ export default function RootLayout({
     <html lang="en">
       <body className="overflow-x-hidden bg-gray-50 text-gray-900">
         <header className="border-b border-gray-200 bg-white">
-          <nav className="mx-auto w-full max-w-5xl px-4 py-4 sm:px-6">
-            {/* Top row */}
+          <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-4 sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <Link
-                href="/"
-                className="text-lg font-bold tracking-tight"
-              >
+              <Link href="/" className="text-xl font-bold tracking-tight">
                 Daily Good News 🌤️
               </Link>
 
@@ -30,8 +26,7 @@ export default function RootLayout({
               </div>
             </div>
 
-            {/* Category row */}
-            <div className="mt-3 flex flex-wrap gap-3 text-sm text-gray-600">
+            <div className="flex flex-wrap gap-3 text-sm text-gray-600">
               <Link href="/category/kindness" className="hover:underline">
                 Kindness
               </Link>
@@ -51,10 +46,7 @@ export default function RootLayout({
           </nav>
         </header>
 
-        {/* Main content */}
-        <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
-          {children}
-        </div>
+        {children}
       </body>
     </html>
   );
