@@ -135,6 +135,13 @@ const STRONG_NEGATIVE_PATTERNS = [
   /\bwar\b/i,
   /deadly/i,
   /massacre/i,
+  /unsafe/i,
+  /health warnings?/i,
+  /urgent warnings?/i,
+  /raising concerns?/i,
+  /deemed unsafe/i,
+  /public warning/i,
+  /outbreak/i,
 ];
 
 const NEGATIVE_PATTERNS = [
@@ -165,6 +172,13 @@ const NEGATIVE_PATTERNS = [
   /evacuation/i,
   /stolen/i,
   /explode|exploded/i,
+  /concerns?/i,
+  /warning/i,
+  /unsafe conditions?/i,
+  /risk/i,
+  /danger/i,
+  /hazard/i,
+  /surging/i,
 ];
 
 function slugify(text: string) {
@@ -332,6 +346,26 @@ function decideImportStory(
   const contentText = content || "";
 
   const combinedHeadline = `${titleText} ${summaryText}`.trim();
+
+  const SOFT_BLOCK_PATTERNS = [
+  /unsafe/i,
+  /health warnings?/i,
+  /urgent warnings?/i,
+  /raising concerns?/i,
+  /deemed unsafe/i,
+  /public warning/i,
+  /surging.*concerns?/i,
+  /doctors?\s+are\s+raising\s+concerns?/i,
+  /officials?\s+issue\s+urgent/i,
+];
+
+if (SOFT_BLOCK_PATTERNS.some((pattern) => pattern.test(combinedHeadline))) {
+  return {
+    accepted: false,
+    score: -5,
+    reason: "rejected by warning/concern blocker",
+  };
+}
 
   const headlineScore = scoreText(combinedHeadline);
   const weightedHeadlineScore = headlineScore + sourceWeight;
