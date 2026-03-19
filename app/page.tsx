@@ -1,229 +1,254 @@
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../lib/supabase";
 import Link from "next/link";
 
 type Story = {
   id: string;
   title: string;
   slug: string;
-  summary: string | null;
-  content: string | null;
+  summary: string;
   image_url: string | null;
-  category_slug: string | null;
-  featured: boolean | null;
-  source_url: string;
-  publish_date: string | null;
+  source_name: string;
+  publish_date: string;
+  category_slug: string;
+  story_score: number | null;
 };
 
-export default async function Home() {
-  const { data, error } = await supabase
-    .from("stories")
-    .select("*")
-    .order("publish_date", { ascending: false })
-    .limit(20);
+function formatDate(dateString: string) {
+  return new Date(dateString).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
-  const stories = (data ?? []) as Story[];
+function getRecentCutoffIso(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString();
+}
+
+function categoryLabel(category: string) {
+  switch (category) {
+    case "health":
+      return "Health";
+    case "community":
+      return "Community";
+    case "kindness":
+      return "Kindness";
+    case "animals":
+      return "Animals";
+    case "hope":
+    default:
+      return "Hope";
+  }
+}
+
+function categoryClasses(category: string) {
+  switch (category) {
+    case "health":
+      return "bg-green-100 text-green-800";
+    case "community":
+      return "bg-blue-100 text-blue-800";
+    case "kindness":
+      return "bg-pink-100 text-pink-800";
+    case "animals":
+      return "bg-amber-100 text-amber-800";
+    case "hope":
+    default:
+      return "bg-yellow-100 text-yellow-800";
+  }
+}
+
+export default async function HomePage() {
+  const recentCutoff = getRecentCutoffIso(2);
+
+  const { data: recentFeaturedCandidates, error: recentError } = await supabase
+    .from("stories")
+    .select(
+      "id, title, slug, summary, image_url, source_name, publish_date, category_slug, story_score"
+    )
+    .gte("publish_date", recentCutoff)
+    .order("story_score", { ascending: false, nullsFirst: false })
+    .order("publish_date", { ascending: false })
+    .limit(1);
+
+  if (recentError) {
+    return (
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        <h1 className="mb-4 text-4xl font-bold">Daily Good News</h1>
+        <p>Could not load stories.</p>
+      </main>
+    );
+  }
+
+  let featuredStory = recentFeaturedCandidates?.[0] ?? null;
+
+  if (!featuredStory) {
+    const { data: fallbackFeatured, error: fallbackError } = await supabase
+      .from("stories")
+      .select(
+        "id, title, slug, summary, image_url, source_name, publish_date, category_slug, story_score"
+      )
+      .order("story_score", { ascending: false, nullsFirst: false })
+      .order("publish_date", { ascending: false })
+      .limit(1);
+
+    if (fallbackError) {
+      return (
+        <main className="mx-auto max-w-6xl px-6 py-10">
+          <h1 className="mb-4 text-4xl font-bold">Daily Good News</h1>
+          <p>Could not load stories.</p>
+        </main>
+      );
+    }
+
+    featuredStory = fallbackFeatured?.[0] ?? null;
+  }
+
+  const { data: stories, error } = await supabase
+    .from("stories")
+    .select(
+      "id, title, slug, summary, image_url, source_name, publish_date, category_slug, story_score"
+    )
+    .order("story_score", { ascending: false, nullsFirst: false })
+    .order("publish_date", { ascending: false })
+    .limit(25);
 
   if (error) {
     return (
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: 40 }}>
-        <h1>Daily Good News 🌤️</h1>
-        <p>Error loading stories.</p>
-        <pre>{error.message}</pre>
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        <h1 className="mb-4 text-4xl font-bold">Daily Good News</h1>
+        <p>Could not load stories.</p>
       </main>
     );
   }
 
-  if (stories.length === 0) {
-    return (
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: 40 }}>
-        <h1>Daily Good News 🌤️</h1>
-        <p>No stories yet.</p>
-      </main>
-    );
-  }
-
-  const featured = stories.find((story) => story.featured) ?? stories[0];
-  const rest = stories.filter((story) => story.id !== featured.id);
+  const remainingStories =
+    stories?.filter((story: Story) => story.id !== featuredStory?.id) ?? [];
 
   return (
-    <main style={{ maxWidth: 1100, margin: "0 auto", padding: 40 }}>
-      <section
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1.2fr 1fr",
-          gap: 30,
-          marginBottom: 50,
-          alignItems: "stretch",
-        }}
-      >
-        <div>
-          <small style={{ textTransform: "capitalize", color: "#64748b" }}>
-            {featured.category_slug ?? "hope"}
-          </small>
+    <main className="mx-auto max-w-6xl px-6 py-10">
+      <header className="mb-10">
+        <h1 className="text-4xl font-bold tracking-tight">Daily Good News</h1>
+        <p className="mt-2 max-w-2xl text-gray-600">
+          Uplifting stories from health, science, kindness, community, and hope.
+        </p>
+      </header>
 
-          <h1 style={{ fontSize: "2.8rem", lineHeight: 1.1, margin: "12px 0 16px" }}>
-            {featured.title}
-          </h1>
-
-          <p style={{ fontSize: 18, color: "#555", lineHeight: 1.6 }}>
-            {(featured.summary ?? featured.content ?? "").slice(0, 220)}...
-          </p>
-
-          <div style={{ marginTop: 20, display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <Link
-              href={`/stories/${featured.slug}`}
-              style={{
-                fontWeight: 600,
-                textDecoration: "none",
-                color: "#0f172a",
-              }}
-            >
-              Read full story →
-            </Link>
-
-            <a
-              href={featured.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                color: "#475569",
-                textDecoration: "none",
-              }}
-            >
-              View original source ↗
-            </a>
+      {featuredStory && (
+        <section className="mb-12">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-2xl font-semibold">Top good news</h2>
+            <span className="text-sm text-gray-500">Featured story</span>
           </div>
-        </div>
 
-        <div
-          style={{
-            borderRadius: 20,
-            overflow: "hidden",
-            minHeight: 320,
-            background: "#f1f5f9",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {featured.image_url ? (
-            <img
-              src={featured.image_url}
-              alt={featured.title}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                fontSize: 52,
-                color: "#94a3b8",
-              }}
-            >
-              🌤️
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section>
-        <h2 style={{ marginBottom: 20 }}>Latest Stories</h2>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: 24,
-          }}
-        >
-          {rest.map((story) => (
-            <Link
-              key={story.id}
-              href={`/stories/${story.slug}`}
-              style={{
-                background: "white",
-                borderRadius: 14,
-                overflow: "hidden",
-                boxShadow: "0 6px 20px rgba(0,0,0,0.06)",
-                display: "block",
-                color: "inherit",
-                textDecoration: "none",
-              }}
-            >
-              {story.image_url ? (
+          <Link href={`/stories/${featuredStory.slug}`} className="block group">
+            <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
+              {featuredStory.image_url ? (
                 <img
-                  src={story.image_url}
-                  alt={story.title}
-                  style={{
-                    width: "100%",
-                    height: 180,
-                    objectFit: "cover",
-                    display: "block",
-                  }}
+                  src={featuredStory.image_url}
+                  alt={featuredStory.title}
+                  className="h-[380px] w-full object-cover"
                 />
               ) : (
-                <div
-                  style={{
-                    width: "100%",
-                    height: 180,
-                    background: "#f1f5f9",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 32,
-                    color: "#94a3b8",
-                  }}
-                >
-                  🌤️
+                <div className="flex h-[380px] w-full items-center justify-center bg-gray-100 text-gray-400">
+                  No image available
                 </div>
               )}
 
-              <div style={{ padding: 18 }}>
-                <small
-                  style={{
-                    textTransform: "capitalize",
-                    color: "#64748b",
-                  }}
-                >
-                  {story.category_slug ?? "hope"}
-                </small>
+              <div className="p-6 md:p-8">
+                <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+                  <span
+                    className={`rounded-full px-3 py-1 font-medium ${categoryClasses(
+                      featuredStory.category_slug
+                    )}`}
+                  >
+                    {categoryLabel(featuredStory.category_slug)}
+                  </span>
+                  <span className="text-gray-400">•</span>
+                  <span className="text-gray-600">{featuredStory.source_name}</span>
+                  <span className="text-gray-400">•</span>
+                  <span className="text-gray-600">
+                    {formatDate(featuredStory.publish_date)}
+                  </span>
+                </div>
 
-                <h3 style={{ margin: "10px 0", lineHeight: 1.3 }}>{story.title}</h3>
+                <h3 className="text-3xl font-semibold leading-tight group-hover:underline">
+                  {featuredStory.title}
+                </h3>
 
-                <p style={{ color: "#555", lineHeight: 1.5 }}>
-                  {(story.summary ?? story.content ?? "").slice(0, 120)}...
+                <p className="mt-4 max-w-3xl text-lg text-gray-700 line-clamp-4">
+                  {featuredStory.summary}
+                </p>
+
+                <p className="mt-6 text-sm font-medium text-gray-900">
+                  Read full story →
                 </p>
               </div>
-            </Link>
-          ))}
-        </div>
-      </section>
+            </article>
+          </Link>
+        </section>
+      )}
 
-      <section style={{ marginTop: 60 }}>
-        <h2>Browse by Category</h2>
-        <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" }}>
-          {["kindness", "community", "animals", "health", "hope"].map((cat) => (
-            <Link
-              key={cat}
-              href={`/category/${cat}`}
-              style={{
-                padding: "10px 16px",
-                background: "#f1f5f9",
-                borderRadius: 999,
-                fontSize: 14,
-                textTransform: "capitalize",
-                color: "#0f172a",
-                textDecoration: "none",
-              }}
-            >
-              {cat}
-            </Link>
-          ))}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-2xl font-semibold">Latest uplifting stories</h2>
+          <span className="text-sm text-gray-500">
+            Ranked by positivity and freshness
+          </span>
         </div>
+
+        {remainingStories.length === 0 ? (
+          <p className="text-gray-600">No stories found yet.</p>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {remainingStories.map((story: Story) => (
+              <Link
+                key={story.id}
+                href={`/stories/${story.slug}`}
+                className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md"
+              >
+                {story.image_url ? (
+                  <img
+                    src={story.image_url}
+                    alt={story.title}
+                    className="h-56 w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-56 w-full items-center justify-center bg-gray-100 text-gray-400">
+                    No image
+                  </div>
+                )}
+
+                <div className="p-5">
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+                    <span
+                      className={`rounded-full px-2.5 py-1 font-medium ${categoryClasses(
+                        story.category_slug
+                      )}`}
+                    >
+                      {categoryLabel(story.category_slug)}
+                    </span>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-gray-500">{story.source_name}</span>
+                  </div>
+
+                  <h3 className="text-xl font-semibold leading-snug group-hover:underline">
+                    {story.title}
+                  </h3>
+
+                  <p className="mt-3 text-sm text-gray-700 line-clamp-3">
+                    {story.summary}
+                  </p>
+
+                  <p className="mt-4 text-sm text-gray-500">
+                    {formatDate(story.publish_date)}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );
