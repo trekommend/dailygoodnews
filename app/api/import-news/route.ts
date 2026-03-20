@@ -51,9 +51,9 @@ const FEED_SOURCES: FeedSource[] = [
   name: "Good Good Good",
   url: "https://www.goodgoodgood.co/articles/rss.xml",
   defaultCategory: "hope",
-  weight: 2,
-  batchSize: 2,
-  trusted: false,
+  weight: 3,
+  batchSize: 3,
+  trusted: true,
 },
   {
     name: "Fox News Health",
@@ -544,7 +544,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push("IMPORTER_VERSION: scored-filter-v9-goodgoodgood-rss-fix");
+    logs.push("IMPORTER_VERSION: scored-filter-v10-goodgoodgood-trusted");
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
