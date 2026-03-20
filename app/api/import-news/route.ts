@@ -21,6 +21,7 @@ type FeedSource = {
   defaultCategory: string;
   weight?: number;
   batchSize?: number;
+  trusted?: boolean;
 };
 
 type ImportDecision = {
@@ -36,6 +37,7 @@ const FEED_SOURCES: FeedSource[] = [
     defaultCategory: "hope",
     weight: 3,
     batchSize: 5,
+    trusted: true,
   },
   {
     name: "Positive News",
@@ -43,6 +45,7 @@ const FEED_SOURCES: FeedSource[] = [
     defaultCategory: "hope",
     weight: 3,
     batchSize: 5,
+    trusted: true,
   },
   {
     name: "Fox News Health",
@@ -83,6 +86,11 @@ const STRONG_POSITIVE_PATTERNS = [
   /(conservation|wildlife)\s+(effort|success|recovery|protection)/i,
   /(donation|fundraiser|charity|tips)\s+(helps|supports|raises|replaces)/i,
   /(showed up with|raised|donated)\s+\$?\d+/i,
+  /(first-ever|successful)\s+(surgery|treatment|procedure)/i,
+  /critically-endangered/i,
+  /gave birth/i,
+  /veterinarians?\s+(perform|save|help)/i,
+  /saved?\s+(animal|monkey|ape|species|wildlife)/i,
 ];
 
 const POSITIVE_PATTERNS = [
@@ -180,7 +188,6 @@ const NEGATIVE_PATTERNS = [
   /risk/i,
   /danger/i,
   /hazard/i,
-  /surging/i,
   /advisory/i,
   /alert/i,
 ];
@@ -318,12 +325,12 @@ function guessCategory(title: string, summary: string, fallback = "hope") {
   const titleText = title.toLowerCase();
   const text = `${title} ${summary}`.toLowerCase();
 
-  if (/animal|bird|dog|cat|wildlife|species|zoo/.test(titleText)) return "animals";
+  if (/animal|bird|dog|cat|wildlife|species|zoo|monkey|ape/.test(titleText)) return "animals";
   if (/health|hospital|medical|therapy|wellness|patient/.test(titleText)) return "health";
   if (/community|school|volunteer|neighbors|family|town|city|teacher/.test(titleText)) return "community";
   if (/kindness|charity|helped|donated|gift|fundraiser|support/.test(titleText)) return "kindness";
 
-  if (/animal|bird|dog|cat|wildlife|species|zoo/.test(text)) return "animals";
+  if (/animal|bird|dog|cat|wildlife|species|zoo|monkey|ape/.test(text)) return "animals";
   if (/health|hospital|medical|therapy|wellness|mental health|patient/.test(text)) return "health";
   if (/community|school|volunteer|neighbors|family|town|city|teacher/.test(text)) return "community";
   if (/kindness|charity|helped|donated|gift|fundraiser|support/.test(text)) return "kindness";
@@ -357,13 +364,31 @@ function decideImportStory(
   title: string,
   summary: string,
   content: string,
-  sourceWeight = 1
+  sourceWeight = 1,
+  trustedSource = false
 ): ImportDecision {
   const titleText = title || "";
   const summaryText = summary || "";
   const contentText = content || "";
 
   const combinedHeadline = `${titleText} ${summaryText}`.trim();
+
+  if (trustedSource) {
+    const headlineScore = scoreText(combinedHeadline);
+    const shortenedContent = contentText.slice(0, 1200);
+    const contentScore = scoreText(shortenedContent);
+
+    const trustedScore =
+      sourceWeight +
+      Math.max(headlineScore, 0) +
+      Math.max(Math.round(contentScore * 0.5), 0);
+
+    return {
+      accepted: true,
+      score: Math.max(trustedScore, sourceWeight),
+      reason: "accepted from trusted source",
+    };
+  }
 
   if (SOFT_BLOCK_PATTERNS.some((pattern) => pattern.test(combinedHeadline))) {
     return {
@@ -504,7 +529,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push("IMPORTER_VERSION: scored-filter-v5-warning-blocker");
+    logs.push("IMPORTER_VERSION: scored-filter-v6-trusted-sources");
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
@@ -555,7 +580,8 @@ export async function GET() {
               title,
               summary,
               content,
-              source.weight ?? 1
+              source.weight ?? 1,
+              source.trusted ?? false
             );
 
             if (!decision.accepted) {
