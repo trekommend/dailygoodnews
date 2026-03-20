@@ -453,6 +453,20 @@ function decideImportStory(
   };
 }
 
+function freshnessBonusFromDate(publishDate: string) {
+  const published = new Date(publishDate).getTime();
+  if (Number.isNaN(published)) return 0;
+
+  const now = Date.now();
+  const ageMs = now - published;
+  const ageHours = ageMs / (1000 * 60 * 60);
+
+  if (ageHours <= 24) return 3;
+  if (ageHours <= 48) return 2;
+  if (ageHours <= 72) return 1;
+  return 0;
+}
+
 function extractImageFromFeed(item: FeedItem, sourceUrl: string): string | null {
   return (
     cleanImageUrl(item.enclosure?.url, sourceUrl) ||
@@ -529,7 +543,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push("IMPORTER_VERSION: scored-filter-v6-trusted-sources");
+    logs.push("IMPORTER_VERSION: scored-filter-v7-bonuses");
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
@@ -618,10 +632,15 @@ export async function GET() {
               imageSource = "existing";
             }
 
+            const trustedBonus = source.trusted ? 1 : 0;
+            const freshnessBonus = freshnessBonusFromDate(publishDate);
+
             const storyScore =
               decision.score +
               (imageUrl ? 2 : 0) +
-              (source.weight ?? 1);
+              (source.weight ?? 1) +
+              trustedBonus +
+              freshnessBonus;
 
             const story = {
               title,

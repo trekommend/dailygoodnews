@@ -13,6 +13,8 @@ type Story = {
   story_score: number | null;
 };
 
+const TRUSTED_SOURCE_NAMES = ["Good News Network", "Positive News"];
+
 function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString("en-US", {
     month: "short",
@@ -62,15 +64,30 @@ export default async function HomePage() {
   const selectFields =
     "id, title, slug, summary, image_url, source_name, publish_date, category_slug, story_score";
 
-  const { data: recentFeaturedCandidates } = await supabase
+  let featuredStory: Story | null = null;
+
+  const { data: recentTrustedFeatured } = await supabase
     .from("stories")
     .select(selectFields)
     .gte("publish_date", recentCutoff)
+    .in("source_name", TRUSTED_SOURCE_NAMES)
     .order("story_score", { ascending: false, nullsFirst: false })
     .order("publish_date", { ascending: false })
     .limit(1);
 
-  let featuredStory = recentFeaturedCandidates?.[0] ?? null;
+  featuredStory = recentTrustedFeatured?.[0] ?? null;
+
+  if (!featuredStory) {
+    const { data: recentFeatured } = await supabase
+      .from("stories")
+      .select(selectFields)
+      .gte("publish_date", recentCutoff)
+      .order("story_score", { ascending: false, nullsFirst: false })
+      .order("publish_date", { ascending: false })
+      .limit(1);
+
+    featuredStory = recentFeatured?.[0] ?? null;
+  }
 
   if (!featuredStory) {
     const { data: fallbackFeatured } = await supabase
@@ -216,7 +233,7 @@ export default async function HomePage() {
                     fontWeight: 600,
                     lineHeight: 1.2,
                     margin: 0,
-                    wordBreak: "break-word",
+                    wordBreak: 'break-word',
                   }}
                 >
                   {featuredStory.title}
@@ -272,7 +289,12 @@ export default async function HomePage() {
               <Link
                 key={story.id}
                 href={`/stories/${story.slug}`}
-                style={{ display: "block", textDecoration: "none", color: "inherit", minWidth: 0 }}
+                style={{
+                  display: "block",
+                  textDecoration: "none",
+                  color: "inherit",
+                  minWidth: 0,
+                }}
               >
                 <article
                   style={{
