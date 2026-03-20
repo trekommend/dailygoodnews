@@ -61,14 +61,7 @@ const FEED_SOURCES: FeedSource[] = [
     weight: 2,
     batchSize: 5,
   },
-  {
-    name: "Fox News Travel",
-    url: "https://moxie.foxnews.com/google-publisher/travel.xml",
-    defaultCategory: "community",
-    weight: 2,
-    batchSize: 3,
-  },
-  {
+    {
     name: "Washington Post Lifestyle",
     url: "https://feeds.washingtonpost.com/rss/lifestyle",
     defaultCategory: "community",
@@ -543,7 +536,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push("IMPORTER_VERSION: scored-filter-v7-bonuses");
+    logs.push("IMPORTER_VERSION: scored-filter-v8-remove-fox-travel");
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
