@@ -142,6 +142,8 @@ const STRONG_NEGATIVE_PATTERNS = [
   /deemed unsafe/i,
   /public warning/i,
   /outbreak/i,
+  /travel advisory/i,
+  /health alert/i,
 ];
 
 const NEGATIVE_PATTERNS = [
@@ -179,6 +181,22 @@ const NEGATIVE_PATTERNS = [
   /danger/i,
   /hazard/i,
   /surging/i,
+  /advisory/i,
+  /alert/i,
+];
+
+const SOFT_BLOCK_PATTERNS = [
+  /unsafe/i,
+  /health warnings?/i,
+  /urgent warnings?/i,
+  /raising concerns?/i,
+  /deemed unsafe/i,
+  /public warning/i,
+  /surging.*concerns?/i,
+  /doctors?\s+are\s+raising\s+concerns?/i,
+  /officials?\s+issue\s+urgent/i,
+  /travel advisory/i,
+  /health alert/i,
 ];
 
 function slugify(text: string) {
@@ -347,25 +365,13 @@ function decideImportStory(
 
   const combinedHeadline = `${titleText} ${summaryText}`.trim();
 
-  const SOFT_BLOCK_PATTERNS = [
-  /unsafe/i,
-  /health warnings?/i,
-  /urgent warnings?/i,
-  /raising concerns?/i,
-  /deemed unsafe/i,
-  /public warning/i,
-  /surging.*concerns?/i,
-  /doctors?\s+are\s+raising\s+concerns?/i,
-  /officials?\s+issue\s+urgent/i,
-];
-
-if (SOFT_BLOCK_PATTERNS.some((pattern) => pattern.test(combinedHeadline))) {
-  return {
-    accepted: false,
-    score: -5,
-    reason: "rejected by warning/concern blocker",
-  };
-}
+  if (SOFT_BLOCK_PATTERNS.some((pattern) => pattern.test(combinedHeadline))) {
+    return {
+      accepted: false,
+      score: -5,
+      reason: "rejected by warning/concern blocker",
+    };
+  }
 
   const headlineScore = scoreText(combinedHeadline);
   const weightedHeadlineScore = headlineScore + sourceWeight;
@@ -387,6 +393,15 @@ if (SOFT_BLOCK_PATTERNS.some((pattern) => pattern.test(combinedHeadline))) {
   }
 
   const shortenedContent = contentText.slice(0, 1200);
+
+  if (SOFT_BLOCK_PATTERNS.some((pattern) => pattern.test(shortenedContent))) {
+    return {
+      accepted: false,
+      score: -5,
+      reason: "rejected by warning/concern blocker in content",
+    };
+  }
+
   const contentScore = scoreText(shortenedContent);
 
   const finalScore =
@@ -489,7 +504,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push("IMPORTER_VERSION: scored-filter-v4-ranking");
+    logs.push("IMPORTER_VERSION: scored-filter-v5-warning-blocker");
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
