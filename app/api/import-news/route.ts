@@ -30,6 +30,8 @@ type ImportDecision = {
   reason: string;
 };
 
+const IMPORTER_VERSION = "scored-filter-v11-analytics-category-cleanup";
+
 const FEED_SOURCES: FeedSource[] = [
   {
     name: "Good News Network",
@@ -48,13 +50,13 @@ const FEED_SOURCES: FeedSource[] = [
     trusted: true,
   },
   {
-  name: "Good Good Good",
-  url: "https://www.goodgoodgood.co/articles/rss.xml",
-  defaultCategory: "hope",
-  weight: 3,
-  batchSize: 3,
-  trusted: true,
-},
+    name: "Good Good Good",
+    url: "https://www.goodgoodgood.co/articles/rss.xml",
+    defaultCategory: "hope",
+    weight: 3,
+    batchSize: 3,
+    trusted: true,
+  },
   {
     name: "Fox News Health",
     url: "https://moxie.foxnews.com/google-publisher/health.xml",
@@ -69,7 +71,7 @@ const FEED_SOURCES: FeedSource[] = [
     weight: 2,
     batchSize: 5,
   },
-    {
+  {
     name: "Washington Post Lifestyle",
     url: "https://feeds.washingtonpost.com/rss/lifestyle",
     defaultCategory: "community",
@@ -191,6 +193,10 @@ const NEGATIVE_PATTERNS = [
   /hazard/i,
   /advisory/i,
   /alert/i,
+  /cancel(l?ed|lation|s)?/i,
+  /disappointment/i,
+  /disrupted?/i,
+  /delay(ed|s)?/i,
 ];
 
 const SOFT_BLOCK_PATTERNS = [
@@ -205,6 +211,16 @@ const SOFT_BLOCK_PATTERNS = [
   /officials?\s+issue\s+urgent/i,
   /travel advisory/i,
   /health alert/i,
+  /cancels? planned sailings/i,
+  /canceled sailings/i,
+  /upending vacations?/i,
+  /definitely a disappointment/i,
+  /travel disruption/i,
+  /flight delays?/i,
+  /long lines?/i,
+  /miserably long/i,
+  /vacation(s)? disrupted/i,
+  /cruise line cancels?/i,
 ];
 
 function slugify(text: string) {
@@ -326,15 +342,27 @@ function guessCategory(title: string, summary: string, fallback = "hope") {
   const titleText = title.toLowerCase();
   const text = `${title} ${summary}`.toLowerCase();
 
-  if (/animal|bird|dog|cat|wildlife|species|zoo|monkey|ape/.test(titleText)) return "animals";
-  if (/health|hospital|medical|therapy|wellness|patient/.test(titleText)) return "health";
-  if (/community|school|volunteer|neighbors|family|town|city|teacher/.test(titleText)) return "community";
-  if (/kindness|charity|helped|donated|gift|fundraiser|support/.test(titleText)) return "kindness";
+  const animalPattern =
+    /\b(animal|animals|dog|dogs|cat|cats|bird|birds|wildlife|species|zoo|monkey|ape|elephant|whale|dolphin|turtle|penguin|rescue animal|endangered)\b/;
 
-  if (/animal|bird|dog|cat|wildlife|species|zoo|monkey|ape/.test(text)) return "animals";
-  if (/health|hospital|medical|therapy|wellness|mental health|patient/.test(text)) return "health";
-  if (/community|school|volunteer|neighbors|family|town|city|teacher/.test(text)) return "community";
-  if (/kindness|charity|helped|donated|gift|fundraiser|support/.test(text)) return "kindness";
+  const healthPattern =
+    /\b(health|hospital|medical|therapy|wellness|mental health|patient|treatment|doctor|doctors|surgery|medicine)\b/;
+
+  const communityPattern =
+    /\b(community|school|volunteer|neighbors|family|town|city|teacher|teachers|students|local group)\b/;
+
+  const kindnessPattern =
+    /\b(kindness|charity|helped|donated|donation|gift|fundraiser|support|generosity|compassion)\b/;
+
+  if (animalPattern.test(titleText)) return "animals";
+  if (healthPattern.test(titleText)) return "health";
+  if (communityPattern.test(titleText)) return "community";
+  if (kindnessPattern.test(titleText)) return "kindness";
+
+  if (animalPattern.test(text)) return "animals";
+  if (healthPattern.test(text)) return "health";
+  if (communityPattern.test(text)) return "community";
+  if (kindnessPattern.test(text)) return "kindness";
 
   return fallback;
 }
@@ -395,7 +423,7 @@ function decideImportStory(
     return {
       accepted: false,
       score: -5,
-      reason: "rejected by warning/concern blocker",
+      reason: "rejected by warning/concern/travel blocker",
     };
   }
 
@@ -424,7 +452,7 @@ function decideImportStory(
     return {
       accepted: false,
       score: -5,
-      reason: "rejected by warning/concern blocker in content",
+      reason: "rejected by warning/concern/travel blocker in content",
     };
   }
 
@@ -544,7 +572,7 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
-    logs.push("IMPORTER_VERSION: scored-filter-v10-goodgoodgood-trusted");
+    logs.push(`IMPORTER_VERSION: ${IMPORTER_VERSION}`);
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
     const parser = new Parser<any, FeedItem>({
@@ -569,13 +597,21 @@ export async function GET() {
       let sourceSaved = 0;
       let sourceSkipped = 0;
       let sourceErrors = 0;
+      let sourceFeedImages = 0;
+      let sourcePageImages = 0;
+      let sourceExistingImages = 0;
+      let sourceNoImages = 0;
+      let fetchedCount = 0;
+      let batchCount = 0;
 
       try {
         const feed = await parser.parseURL(source.url);
+        fetchedCount = feed.items.length;
         logs.push(`Feed: ${source.name} (${feed.items.length} items)`);
 
         const batchSize = source.batchSize ?? 5;
         const batchItems = feed.items.slice(0, batchSize);
+        batchCount = batchItems.length;
 
         logs.push(`Batch size for ${source.name}: ${batchItems.length}`);
 
@@ -672,10 +708,19 @@ export async function GET() {
             savedCount += 1;
             sourceSaved += 1;
 
-            if (imageSource === "feed") feedImageCount += 1;
-            else if (imageSource === "page") pageImageCount += 1;
-            else if (imageSource === "existing") existingImageCount += 1;
-            else noImageCount += 1;
+            if (imageSource === "feed") {
+              feedImageCount += 1;
+              sourceFeedImages += 1;
+            } else if (imageSource === "page") {
+              pageImageCount += 1;
+              sourcePageImages += 1;
+            } else if (imageSource === "existing") {
+              existingImageCount += 1;
+              sourceExistingImages += 1;
+            } else {
+              noImageCount += 1;
+              sourceNoImages += 1;
+            }
           } catch (err) {
             errorCount += 1;
             sourceErrors += 1;
@@ -688,8 +733,23 @@ export async function GET() {
         );
       } catch (err) {
         errorCount += 1;
+        sourceErrors += 1;
         logs.push(`Error reading feed ${source.name}: ${String(err)}`);
       }
+
+      await supabase.from("importer_runs").insert({
+        importer_version: IMPORTER_VERSION,
+        source_name: source.name,
+        fetched_count: fetchedCount,
+        batch_count: batchCount,
+        saved_count: sourceSaved,
+        skipped_count: sourceSkipped,
+        error_count: sourceErrors,
+        feed_image_count: sourceFeedImages,
+        page_image_count: sourcePageImages,
+        existing_image_count: sourceExistingImages,
+        no_image_count: sourceNoImages,
+      });
     }
 
     logs.push(`Saved: ${savedCount}`);
