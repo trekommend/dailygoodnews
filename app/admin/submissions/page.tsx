@@ -14,16 +14,13 @@ type SubmissionRow = {
   submitted_at: string;
   moderation_notes: string | null;
   linked_story_id: string | null;
+  story_slug?: string | null;
 };
 
 type SearchParams = Promise<{
   status?: string;
   flagged?: string;
 }>;
-
-function formatSubmissionType(type: SubmissionRow["submission_type"]) {
-  return type === "original_story" ? "Original Story" : "Article Link";
-}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("en-US", {
@@ -157,7 +154,33 @@ export default async function AdminSubmissionsPage({
     );
   }
 
-  const allRows = (submissions || []) as SubmissionRow[];
+  const baseRows = (submissions || []) as SubmissionRow[];
+
+  const linkedStoryIds = baseRows
+    .map((item) => item.linked_story_id)
+    .filter((id): id is string => !!id);
+
+  let storySlugMap = new Map<string, string>();
+
+  if (linkedStoryIds.length > 0) {
+    const { data: linkedStories } = await supabase
+      .from("stories")
+      .select("id, slug")
+      .in("id", linkedStoryIds);
+
+    storySlugMap = new Map(
+      (linkedStories || [])
+        .filter((story) => !!story.id && !!story.slug)
+        .map((story) => [story.id as string, story.slug as string])
+    );
+  }
+
+  const allRows = baseRows.map((row) => ({
+    ...row,
+    story_slug: row.linked_story_id
+      ? storySlugMap.get(row.linked_story_id) || null
+      : null,
+  }));
 
   const pendingCount = allRows.filter((item) => item.status === "pending").length;
   const approvedCount = allRows.filter((item) => item.status === "approved").length;
@@ -217,41 +240,47 @@ export default async function AdminSubmissionsPage({
           </div>
         </div>
 
-        <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
-          <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-gray-500">Pending</div>
-            <div className="mt-2 text-3xl font-bold text-gray-900">
-              {pendingCount}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-gray-500">Approved</div>
-            <div className="mt-2 text-3xl font-bold text-gray-900">
-              {approvedCount}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-gray-500">Rejected</div>
-            <div className="mt-2 text-3xl font-bold text-gray-900">
-              {rejectedCount}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-gray-500">Published</div>
-            <div className="mt-2 text-3xl font-bold text-gray-900">
-              {publishedCount}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-gray-500">Flagged</div>
-            <div className="mt-2 text-3xl font-bold text-gray-900">
-              {flaggedCount}
-            </div>
-          </div>
+        <div className="mb-6 overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+          <table className="min-w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-50 text-center">
+                <th className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700">
+                  Pending
+                </th>
+                <th className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700">
+                  Approved
+                </th>
+                <th className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700">
+                  Rejected
+                </th>
+                <th className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700">
+                  Published
+                </th>
+                <th className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700">
+                  Flagged
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="text-center">
+                <td className="px-4 py-4 text-2xl font-bold text-gray-900">
+                  {pendingCount}
+                </td>
+                <td className="px-4 py-4 text-2xl font-bold text-gray-900">
+                  {approvedCount}
+                </td>
+                <td className="px-4 py-4 text-2xl font-bold text-gray-900">
+                  {rejectedCount}
+                </td>
+                <td className="px-4 py-4 text-2xl font-bold text-gray-900">
+                  {publishedCount}
+                </td>
+                <td className="px-4 py-4 text-2xl font-bold text-gray-900">
+                  {flaggedCount}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <div className="mb-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -341,6 +370,22 @@ export default async function AdminSubmissionsPage({
                     const statusStyles = getStatusPillStyles(submission.status);
                     const isFlagged = !!submission.moderation_notes;
 
+                    const typeCell =
+                      submission.submission_type === "article_link" &&
+                      submission.story_slug ? (
+                        <Link
+                          href={`/stories/${submission.story_slug}`}
+                          target="_blank"
+                          className="font-medium text-blue-700 hover:text-blue-800"
+                        >
+                          Article Link
+                        </Link>
+                      ) : submission.submission_type === "original_story" ? (
+                        "Original Story"
+                      ) : (
+                        "Article Link"
+                      );
+
                     return (
                       <tr
                         key={submission.id}
@@ -350,18 +395,10 @@ export default async function AdminSubmissionsPage({
                           <div className="font-medium text-gray-900">
                             {submission.title}
                           </div>
-
-                          {submission.linked_story_id ? (
-                            <div className="mt-2">
-                              <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-                                Published story linked
-                              </span>
-                            </div>
-                          ) : null}
                         </td>
 
                         <td className="px-6 py-4 text-sm text-gray-700">
-                          {formatSubmissionType(submission.submission_type)}
+                          {typeCell}
                         </td>
 
                         <td className="px-6 py-4 text-sm text-gray-700">
