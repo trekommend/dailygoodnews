@@ -30,7 +30,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v11-analytics-category-cleanup";
+const IMPORTER_VERSION = "scored-filter-v12-paragraph-summary";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -282,6 +282,8 @@ function stripHtml(html: string) {
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n\n")
     .replace(/<\/div>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "\n• ")
+    .replace(/<\/li>/gi, "\n")
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+\n/g, "\n")
     .replace(/\n\s+/g, "\n");
@@ -293,9 +295,124 @@ function cleanStoryText(text: string) {
     .replace(/The post .*? appeared first on .*?\.?/gi, "")
     .replace(/Continue reading.*$/gi, "")
     .replace(/Read more.*$/gi, "")
+    .replace(/Originally published on .*?\.?/gi, "")
+    .replace(/Copyright \d{4}.*$/gi, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function normalizeWhitespace(text: string = "") {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function splitIntoParagraphs(text: string = "") {
+  return text
+    .split(/\n{2,}|\r\n\r\n+/)
+    .map((p) => normalizeWhitespace(p))
+    .filter(Boolean);
+}
+
+function isJunkParagraph(paragraph: string = "") {
+  const p = paragraph.trim().toLowerCase();
+
+  if (!p) return true;
+  if (p.length < 40) return true;
+
+  const junkPatterns = [
+    /^(photo|image|credit|caption)\b/,
+    /^(read more|see also|related:?)\b/,
+    /^(sign up|signup|subscribe)\b/,
+    /newsletter/,
+    /follow us on/,
+    /click here/,
+    /advertisement/,
+    /advertising disclosure/,
+    /affiliate/,
+    /all rights reserved/,
+    /^copyright\b/,
+    /^published\b/,
+    /^updated\b/,
+    /^share this\b/,
+    /^watch:?\b/,
+    /^listen:?\b/,
+    /^more from\b/,
+    /^source:?\b/,
+    /^editor'?s note\b/,
+  ];
+
+  if (junkPatterns.some((pattern) => pattern.test(p))) {
+    return true;
+  }
+
+  const wordCount = p.split(/\s+/).length;
+  if (wordCount < 8) return true;
+
+  return false;
+}
+
+function cleanArticleContent(rawContent: string = "") {
+  if (!rawContent) return "";
+
+  const cleaned = cleanStoryText(rawContent);
+  if (!cleaned) return "";
+
+  const paragraphs = splitIntoParagraphs(cleaned).filter(
+    (p) => !isJunkParagraph(p)
+  );
+
+  return paragraphs.join("\n\n").trim();
+}
+
+function truncateAtSentenceBoundary(text: string, maxLength: number) {
+  const normalized = normalizeWhitespace(text);
+
+  if (normalized.length <= maxLength) return normalized;
+
+  const sliced = normalized.slice(0, maxLength);
+  const lastSentenceEnd = Math.max(
+    sliced.lastIndexOf(". "),
+    sliced.lastIndexOf("! "),
+    sliced.lastIndexOf("? ")
+  );
+
+  if (lastSentenceEnd > 120) {
+    return sliced.slice(0, lastSentenceEnd + 1).trim();
+  }
+
+  return `${sliced.trim()}...`;
+}
+
+function buildSummaryFromContent(cleanedContent: string, fallbackSummary: string = "") {
+  const paragraphs = splitIntoParagraphs(cleanedContent).filter(
+    (p) => !isJunkParagraph(p)
+  );
+
+  if (paragraphs.length === 0) {
+    return truncateAtSentenceBoundary(cleanStoryText(fallbackSummary || ""), 500);
+  }
+
+  const selected: string[] = [];
+  let totalChars = 0;
+
+  for (const paragraph of paragraphs) {
+    if (selected.length >= 3) break;
+
+    selected.push(paragraph);
+    totalChars += paragraph.length;
+
+    if (selected.length >= 2 && totalChars >= 350) {
+      break;
+    }
+  }
+
+  const summary = selected.join("\n\n").trim();
+
+  if (!summary) {
+    return truncateAtSentenceBoundary(cleanStoryText(fallbackSummary || ""), 500);
+  }
+
+  return truncateAtSentenceBoundary(summary, 900);
 }
 
 function normalizeForComparison(text: string) {
@@ -307,17 +424,25 @@ function normalizeForComparison(text: string) {
 
 function chooseBestContent(summary: string, rawContent: string) {
   const cleanedSummary = cleanStoryText(summary);
-  const cleanedContent = cleanStoryText(rawContent);
+  const cleanedRawContent = cleanStoryText(rawContent);
+  const cleanedContent = cleanArticleContent(rawContent);
 
-  if (!cleanedContent) {
+  if (!cleanedRawContent && !cleanedSummary) {
     return {
-      summary: cleanedSummary,
+      summary: "",
+      content: "",
+    };
+  }
+
+  if (!cleanedRawContent) {
+    return {
+      summary: truncateAtSentenceBoundary(cleanedSummary, 500),
       content: cleanedSummary,
     };
   }
 
   const normalizedSummary = normalizeForComparison(cleanedSummary);
-  const normalizedContent = normalizeForComparison(cleanedContent);
+  const normalizedContent = normalizeForComparison(cleanedRawContent);
 
   const contentIsMostlySame =
     !!normalizedSummary &&
@@ -325,16 +450,20 @@ function chooseBestContent(summary: string, rawContent: string) {
       normalizedContent.startsWith(normalizedSummary) ||
       normalizedSummary.startsWith(normalizedContent));
 
+  const contentToUse = cleanedContent || cleanedRawContent;
+
   if (contentIsMostlySame) {
+    const summaryFromContent = buildSummaryFromContent(contentToUse, cleanedSummary);
+
     return {
-      summary: cleanedSummary,
-      content: cleanedSummary,
+      summary: summaryFromContent || truncateAtSentenceBoundary(cleanedSummary, 500),
+      content: contentToUse,
     };
   }
 
   return {
-    summary: cleanedSummary,
-    content: cleanedContent,
+    summary: buildSummaryFromContent(contentToUse, cleanedSummary),
+    content: contentToUse,
   };
 }
 
@@ -627,9 +756,13 @@ export async function GET() {
 
             const { summary, content } = chooseBestContent(rawSummary, rawContent);
 
+            const safeSummary =
+              summary ||
+              truncateAtSentenceBoundary(cleanStoryText(rawSummary || title), 500);
+
             const decision = decideImportStory(
               title,
-              summary,
+              safeSummary,
               content,
               source.weight ?? 1,
               source.trusted ?? false
@@ -645,7 +778,7 @@ export async function GET() {
             }
 
             const slug = makeUniqueSlug(title, sourceUrl);
-            const categorySlug = guessCategory(title, summary, source.defaultCategory);
+            const categorySlug = guessCategory(title, safeSummary, source.defaultCategory);
 
             const { data: existingRow } = await supabase
               .from("stories")
@@ -682,7 +815,7 @@ export async function GET() {
             const story = {
               title,
               slug,
-              summary,
+              summary: safeSummary,
               content,
               image_url: imageUrl,
               category_slug: categorySlug,
