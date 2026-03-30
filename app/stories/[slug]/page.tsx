@@ -30,9 +30,14 @@ async function getStory(slug: string): Promise<Story | null> {
 
 function stripHtml(html: string) {
   return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "\n• ")
+    .replace(/<\/li>/gi, "\n")
     .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n\s+/g, "\n");
 }
 
 function decodeHtmlEntities(text: string) {
@@ -52,12 +57,38 @@ function decodeHtmlEntities(text: string) {
     .replace(/&nbsp;/g, " ");
 }
 
-function cleanStoryText(text: string) {
-  return decodeHtmlEntities(stripHtml(text))
-    .replace(/\[\u2026\]|\[\.\.\.\]/g, "")
-    .replace(/The post .*? appeared first on .*?\.?/gi, "")
-    .replace(/\s+/g, " ")
+function removeTrailingSourceBoilerplate(text: string) {
+  if (!text) return "";
+
+  return text
+    .replace(/\bThe post .*? appeared first on .*?\.?$/gi, "")
+    .replace(/\bOriginally published on .*?\.?$/gi, "")
+    .replace(/\bThis article originally appeared on .*?\.?$/gi, "")
+    .replace(/\bAppeared first on .*?\.?$/gi, "")
+    .replace(/\bSource: .*?$/gi, "")
+    .replace(/\bCourtesy of .*?$/gi, "")
+    .replace(/\bvia .*?$/gi, "")
+    .replace(
+      /\s+(of|on|from)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
+      ""
+    )
     .trim();
+}
+
+function cleanStoryText(text: string) {
+  return removeTrailingSourceBoilerplate(
+    decodeHtmlEntities(stripHtml(text))
+      .replace(/\[\u2026\]|\[\.\.\.\]/g, "")
+      .replace(/The post .*? appeared first on .*?\.?/gi, "")
+      .replace(/Continue reading.*$/gi, "")
+      .replace(/Read more.*$/gi, "")
+      .replace(/Originally published on .*?\.?/gi, "")
+      .replace(/This article originally appeared on .*?\.?/gi, "")
+      .replace(/Copyright \d{4}.*$/gi, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
 }
 
 function normalizeForComparison(text: string) {
@@ -65,6 +96,48 @@ function normalizeForComparison(text: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function splitParagraphs(text: string) {
+  return text
+    .split(/\n{2,}|\r\n\r\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+function truncateForMeta(text: string, maxLength = 160) {
+  if (text.length <= maxLength) return text;
+
+  const sliced = text.slice(0, maxLength);
+  const lastSentenceEnd = Math.max(
+    sliced.lastIndexOf(". "),
+    sliced.lastIndexOf("! "),
+    sliced.lastIndexOf("? ")
+  );
+
+  if (lastSentenceEnd > 80) {
+    return `${sliced.slice(0, lastSentenceEnd + 1).trim()}...`;
+  }
+
+  const lastSpace = sliced.lastIndexOf(" ");
+  if (lastSpace > 80) {
+    return `${sliced.slice(0, lastSpace).trim()}...`;
+  }
+
+  return `${sliced.trim()}...`;
+}
+
+function formatReadableDate(dateString: string | null) {
+  if (!dateString) return null;
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export async function generateMetadata({
@@ -79,7 +152,9 @@ export async function generateMetadata({
     };
   }
 
-  const description = cleanStoryText(story.summary ?? story.content ?? "").slice(0, 160);
+  const description = truncateForMeta(
+    cleanStoryText(story.summary ?? story.content ?? "")
+  );
 
   return {
     title: `${story.title} | Daily Good News`,
@@ -113,9 +188,9 @@ export default async function StoryPage({ params }: StoryPageProps) {
 
   const summaryText = cleanStoryText(story.summary ?? "");
   const contentText = cleanStoryText(story.content ?? "");
-  const formattedDate = story.publish_date
-    ? new Date(story.publish_date).toLocaleDateString()
-    : null;
+  const summaryParagraphs = splitParagraphs(summaryText);
+  const contentParagraphs = splitParagraphs(contentText);
+  const formattedDate = formatReadableDate(story.publish_date);
 
   const normalizedSummary = normalizeForComparison(summaryText);
   const normalizedContent = normalizeForComparison(contentText);
@@ -137,10 +212,22 @@ export default async function StoryPage({ params }: StoryPageProps) {
           {story.title}
         </h1>
 
-        {summaryText ? (
-          <p style={{ fontSize: 18, color: "#475569", lineHeight: 1.6 }}>
-            {summaryText}
-          </p>
+        {summaryParagraphs.length > 0 ? (
+          <div style={{ marginTop: 8 }}>
+            {summaryParagraphs.map((paragraph, index) => (
+              <p
+                key={`summary-${index}`}
+                style={{
+                  fontSize: 18,
+                  color: "#475569",
+                  lineHeight: 1.75,
+                  margin: index === summaryParagraphs.length - 1 ? "0" : "0 0 16px",
+                }}
+              >
+                {paragraph}
+              </p>
+            ))}
+          </div>
         ) : null}
       </div>
 
@@ -172,10 +259,18 @@ export default async function StoryPage({ params }: StoryPageProps) {
             fontSize: 18,
             lineHeight: 1.8,
             color: "#0f172a",
-            whiteSpace: "pre-line",
           }}
         >
-          {contentText}
+          {contentParagraphs.map((paragraph, index) => (
+            <p
+              key={`content-${index}`}
+              style={{
+                margin: index === contentParagraphs.length - 1 ? "0" : "0 0 20px",
+              }}
+            >
+              {paragraph}
+            </p>
+          ))}
         </div>
       ) : null}
 
@@ -184,8 +279,12 @@ export default async function StoryPage({ params }: StoryPageProps) {
           marginTop: 36,
           paddingTop: 20,
           borderTop: "1px solid #e2e8f0",
+          color: "#475569",
+          fontSize: 15,
+          lineHeight: 1.6,
         }}
       >
+        Originally published on{" "}
         <a
           href={story.source_url}
           target="_blank"
@@ -193,11 +292,12 @@ export default async function StoryPage({ params }: StoryPageProps) {
           style={{
             color: "#0f172a",
             fontWeight: 600,
-            textDecoration: "none",
+            textDecoration: "underline",
           }}
         >
-          Read original source ↗
+          {story.source_name || "the original source"}
         </a>
+        .
       </div>
     </article>
   );

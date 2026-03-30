@@ -30,7 +30,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v12-paragraph-summary";
+const IMPORTER_VERSION = "scored-filter-v13-paragraph-summary-clean-tail";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -289,17 +289,35 @@ function stripHtml(html: string) {
     .replace(/\n\s+/g, "\n");
 }
 
-function cleanStoryText(text: string) {
-  return decodeHtmlEntities(stripHtml(text))
-    .replace(/\[\u2026\]|\[\.\.\.\]/g, "")
-    .replace(/The post .*? appeared first on .*?\.?/gi, "")
-    .replace(/Continue reading.*$/gi, "")
-    .replace(/Read more.*$/gi, "")
-    .replace(/Originally published on .*?\.?/gi, "")
-    .replace(/Copyright \d{4}.*$/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
+function removeTrailingSourceBoilerplate(text: string) {
+  if (!text) return "";
+
+  return text
+    .replace(/\bThe post .*? appeared first on .*?\.?$/gi, "")
+    .replace(/\bOriginally published on .*?\.?$/gi, "")
+    .replace(/\bThis article originally appeared on .*?\.?$/gi, "")
+    .replace(/\bAppeared first on .*?\.?$/gi, "")
+    .replace(/\bSource: .*?$/gi, "")
+    .replace(/\bCourtesy of .*?$/gi, "")
+    .replace(/\bvia .*?$/gi, "")
+    .replace(/\s+(of|on|from)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi, "")
     .trim();
+}
+
+function cleanStoryText(text: string) {
+  return removeTrailingSourceBoilerplate(
+    decodeHtmlEntities(stripHtml(text))
+      .replace(/\[\u2026\]|\[\.\.\.\]/g, "")
+      .replace(/The post .*? appeared first on .*?\.?/gi, "")
+      .replace(/Continue reading.*$/gi, "")
+      .replace(/Read more.*$/gi, "")
+      .replace(/Originally published on .*?\.?/gi, "")
+      .replace(/This article originally appeared on .*?\.?/gi, "")
+      .replace(/Copyright \d{4}.*$/gi, "")
+      .replace(/\s{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
 }
 
 function normalizeWhitespace(text: string = "") {
@@ -357,19 +375,19 @@ function cleanArticleContent(rawContent: string = "") {
   const cleaned = cleanStoryText(rawContent);
   if (!cleaned) return "";
 
-  const paragraphs = splitIntoParagraphs(cleaned).filter(
-    (p) => !isJunkParagraph(p)
-  );
+  const paragraphs = splitIntoParagraphs(cleaned)
+    .map(removeTrailingSourceBoilerplate)
+    .filter((p) => !isJunkParagraph(p));
 
   return paragraphs.join("\n\n").trim();
 }
 
-function truncateAtSentenceBoundary(text: string, maxLength: number) {
-  const normalized = normalizeWhitespace(text);
+function truncateNicely(text: string, maxLength: number) {
+  const cleaned = removeTrailingSourceBoilerplate(normalizeWhitespace(text));
 
-  if (normalized.length <= maxLength) return normalized;
+  if (cleaned.length <= maxLength) return cleaned;
 
-  const sliced = normalized.slice(0, maxLength);
+  const sliced = cleaned.slice(0, maxLength);
   const lastSentenceEnd = Math.max(
     sliced.lastIndexOf(". "),
     sliced.lastIndexOf("! "),
@@ -377,19 +395,24 @@ function truncateAtSentenceBoundary(text: string, maxLength: number) {
   );
 
   if (lastSentenceEnd > 120) {
-    return sliced.slice(0, lastSentenceEnd + 1).trim();
+    return `${sliced.slice(0, lastSentenceEnd + 1).trim()}...`;
+  }
+
+  const lastSpace = sliced.lastIndexOf(" ");
+  if (lastSpace > 120) {
+    return `${sliced.slice(0, lastSpace).trim()}...`;
   }
 
   return `${sliced.trim()}...`;
 }
 
 function buildSummaryFromContent(cleanedContent: string, fallbackSummary: string = "") {
-  const paragraphs = splitIntoParagraphs(cleanedContent).filter(
-    (p) => !isJunkParagraph(p)
-  );
+  const paragraphs = splitIntoParagraphs(cleanedContent)
+    .map(removeTrailingSourceBoilerplate)
+    .filter((p) => !isJunkParagraph(p));
 
   if (paragraphs.length === 0) {
-    return truncateAtSentenceBoundary(cleanStoryText(fallbackSummary || ""), 500);
+    return truncateNicely(cleanStoryText(fallbackSummary || ""), 500);
   }
 
   const selected: string[] = [];
@@ -409,10 +432,10 @@ function buildSummaryFromContent(cleanedContent: string, fallbackSummary: string
   const summary = selected.join("\n\n").trim();
 
   if (!summary) {
-    return truncateAtSentenceBoundary(cleanStoryText(fallbackSummary || ""), 500);
+    return truncateNicely(cleanStoryText(fallbackSummary || ""), 500);
   }
 
-  return truncateAtSentenceBoundary(summary, 900);
+  return truncateNicely(summary, 900);
 }
 
 function normalizeForComparison(text: string) {
@@ -436,7 +459,7 @@ function chooseBestContent(summary: string, rawContent: string) {
 
   if (!cleanedRawContent) {
     return {
-      summary: truncateAtSentenceBoundary(cleanedSummary, 500),
+      summary: truncateNicely(cleanedSummary, 500),
       content: cleanedSummary,
     };
   }
@@ -456,7 +479,7 @@ function chooseBestContent(summary: string, rawContent: string) {
     const summaryFromContent = buildSummaryFromContent(contentToUse, cleanedSummary);
 
     return {
-      summary: summaryFromContent || truncateAtSentenceBoundary(cleanedSummary, 500),
+      summary: summaryFromContent || truncateNicely(cleanedSummary, 500),
       content: contentToUse,
     };
   }
@@ -757,8 +780,7 @@ export async function GET() {
             const { summary, content } = chooseBestContent(rawSummary, rawContent);
 
             const safeSummary =
-              summary ||
-              truncateAtSentenceBoundary(cleanStoryText(rawSummary || title), 500);
+              summary || truncateNicely(cleanStoryText(rawSummary || title), 500);
 
             const decision = decideImportStory(
               title,
