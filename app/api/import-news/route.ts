@@ -30,7 +30,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v13-paragraph-summary-clean-tail";
+const IMPORTER_VERSION = "scored-filter-v14-summary-tail-cleanup";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -289,19 +289,51 @@ function stripHtml(html: string) {
     .replace(/\n\s+/g, "\n");
 }
 
+function normalizeWhitespace(text: string = "") {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function removeTrailingSourceBoilerplate(text: string) {
   if (!text) return "";
 
-  return text
-    .replace(/\bThe post .*? appeared first on .*?\.?$/gi, "")
-    .replace(/\bOriginally published on .*?\.?$/gi, "")
-    .replace(/\bThis article originally appeared on .*?\.?$/gi, "")
-    .replace(/\bAppeared first on .*?\.?$/gi, "")
-    .replace(/\bSource: .*?$/gi, "")
-    .replace(/\bCourtesy of .*?$/gi, "")
-    .replace(/\bvia .*?$/gi, "")
-    .replace(/\s+(of|on|from)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi, "")
-    .trim();
+  let cleaned = text.trim();
+
+  const trailingPatterns = [
+    /\bThe post .*? appeared first on .*?\.?$/gi,
+    /\bAppeared first on .*?\.?$/gi,
+    /\bOriginally published on .*?\.?$/gi,
+    /\bThis article originally appeared on .*?\.?$/gi,
+    /\bRead the full article at .*?\.?$/gi,
+    /\bRead more at .*?\.?$/gi,
+    /\bSource: .*?$/gi,
+    /\bCourtesy of .*?$/gi,
+    /\bvia .*?$/gi,
+    /\b(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
+    /\b(of|from|on|via)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
+    /\b(first on|published on|appeared on)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
+  ];
+
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    const before = cleaned;
+
+    for (const pattern of trailingPatterns) {
+      cleaned = cleaned.replace(pattern, "").trim();
+    }
+
+    cleaned = cleaned
+      .replace(/\b(of|from|on|via|at|by)\s*$/gi, "")
+      .replace(/[,:;–—-]\s*$/g, "")
+      .trim();
+
+    if (cleaned !== before) {
+      changed = true;
+    }
+  }
+
+  return cleaned;
 }
 
 function cleanStoryText(text: string) {
@@ -318,10 +350,6 @@ function cleanStoryText(text: string) {
       .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
-}
-
-function normalizeWhitespace(text: string = "") {
-  return text.replace(/\s+/g, " ").trim();
 }
 
 function splitIntoParagraphs(text: string = "") {
@@ -385,25 +413,37 @@ function cleanArticleContent(rawContent: string = "") {
 function truncateNicely(text: string, maxLength: number) {
   const cleaned = removeTrailingSourceBoilerplate(normalizeWhitespace(text));
 
-  if (cleaned.length <= maxLength) return cleaned;
+  if (cleaned.length <= maxLength) {
+    return removeTrailingSourceBoilerplate(cleaned);
+  }
 
   const sliced = cleaned.slice(0, maxLength);
+
   const lastSentenceEnd = Math.max(
     sliced.lastIndexOf(". "),
     sliced.lastIndexOf("! "),
     sliced.lastIndexOf("? ")
   );
 
+  let truncated = "";
+
   if (lastSentenceEnd > 120) {
-    return `${sliced.slice(0, lastSentenceEnd + 1).trim()}...`;
+    truncated = sliced.slice(0, lastSentenceEnd + 1).trim();
+  } else {
+    const lastSpace = sliced.lastIndexOf(" ");
+    if (lastSpace > 120) {
+      truncated = sliced.slice(0, lastSpace).trim();
+    } else {
+      truncated = sliced.trim();
+    }
   }
 
-  const lastSpace = sliced.lastIndexOf(" ");
-  if (lastSpace > 120) {
-    return `${sliced.slice(0, lastSpace).trim()}...`;
-  }
+  truncated = removeTrailingSourceBoilerplate(truncated)
+    .replace(/\b(of|from|on|via|at|by)\s*$/gi, "")
+    .replace(/[,:;–—-]\s*$/g, "")
+    .trim();
 
-  return `${sliced.trim()}...`;
+  return `${truncated}...`;
 }
 
 function buildSummaryFromContent(cleanedContent: string, fallbackSummary: string = "") {
