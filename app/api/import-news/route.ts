@@ -30,7 +30,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v14-summary-tail-cleanup";
+const IMPORTER_VERSION = "scored-filter-v15-summary-tail-hard-cleanup";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -296,7 +296,10 @@ function normalizeWhitespace(text: string = "") {
 function removeTrailingSourceBoilerplate(text: string) {
   if (!text) return "";
 
-  let cleaned = text.trim();
+  let cleaned = text
+    .replace(/\s+/g, " ")
+    .replace(/\s+\./g, ".")
+    .trim();
 
   const trailingPatterns = [
     /\bThe post .*? appeared first on .*?\.?$/gi,
@@ -305,12 +308,21 @@ function removeTrailingSourceBoilerplate(text: string) {
     /\bThis article originally appeared on .*?\.?$/gi,
     /\bRead the full article at .*?\.?$/gi,
     /\bRead more at .*?\.?$/gi,
+    /\bRead more from .*?\.?$/gi,
+    /\bMore from .*?\.?$/gi,
+    /\bEarlier,?\s+GNN\s+Good\s+News\s+Network\.?$/gi,
+    /\bGNN\s+Good\s+News\s+Network\.?$/gi,
+    /\bGood\s+News\s+Network\.?$/gi,
+    /\bPositive\s+News\.?$/gi,
+    /\bGood\s+Good\s+Good\.?$/gi,
+    /\bFox\s+News\.?$/gi,
+    /\bWashington\s+Post\.?$/gi,
     /\bSource: .*?$/gi,
     /\bCourtesy of .*?$/gi,
     /\bvia .*?$/gi,
-    /\b(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
-    /\b(of|from|on|via)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
-    /\b(first on|published on|appeared on)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
+    /\b(of|from|on|via|at|by)\s+(GNN\s+)?(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
+    /\b(first on|published on|appeared on)\s+(GNN\s+)?(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
+    /\b(Earlier|Earlier,)\s+(GNN\s+)?(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
   ];
 
   let changed = true;
@@ -324,8 +336,11 @@ function removeTrailingSourceBoilerplate(text: string) {
     }
 
     cleaned = cleaned
-      .replace(/\b(of|from|on|via|at|by)\s*$/gi, "")
+      .replace(/\b(Earlier|Earlier,)\s*$/gi, "")
+      .replace(/\b(GNN)\s*$/gi, "")
+      .replace(/\b(of|from|on|via|at|by|for|with)\s*$/gi, "")
       .replace(/[,:;–—-]\s*$/g, "")
+      .replace(/\s+\./g, ".")
       .trim();
 
     if (cleaned !== before) {
@@ -336,20 +351,49 @@ function removeTrailingSourceBoilerplate(text: string) {
   return cleaned;
 }
 
+function isLikelyPublisherFragment(text: string) {
+  const t = normalizeWhitespace(text).toLowerCase();
+  if (!t) return false;
+
+  const publisherPatterns = [
+    /\bgood news network\b/,
+    /\bgnn good news network\b/,
+    /\bpositive news\b/,
+    /\bgood good good\b/,
+    /\bfox news\b/,
+    /\bwashington post\b/,
+  ];
+
+  const hasPublisher = publisherPatterns.some((pattern) => pattern.test(t));
+  const shortEnough = t.length <= 80;
+  const boilerplateWords = /\b(earlier|source|published|appeared|originally|via|courtesy)\b/.test(t);
+
+  return hasPublisher && (shortEnough || boilerplateWords);
+}
+
 function cleanStoryText(text: string) {
-  return removeTrailingSourceBoilerplate(
-    decodeHtmlEntities(stripHtml(text))
-      .replace(/\[\u2026\]|\[\.\.\.\]/g, "")
-      .replace(/The post .*? appeared first on .*?\.?/gi, "")
-      .replace(/Continue reading.*$/gi, "")
-      .replace(/Read more.*$/gi, "")
-      .replace(/Originally published on .*?\.?/gi, "")
-      .replace(/This article originally appeared on .*?\.?/gi, "")
-      .replace(/Copyright \d{4}.*$/gi, "")
-      .replace(/\s{2,}/g, " ")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim()
-  );
+  const cleaned = decodeHtmlEntities(stripHtml(text))
+    .replace(/\[\u2026\]|\[\.\.\.\]/g, "")
+    .replace(/The post .*? appeared first on .*?\.?/gi, "")
+    .replace(/Continue reading.*$/gi, "")
+    .replace(/Read more.*$/gi, "")
+    .replace(/Originally published on .*?\.?/gi, "")
+    .replace(/This article originally appeared on .*?\.?/gi, "")
+    .replace(/Copyright \d{4}.*$/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  const paragraphs = cleaned
+    .split(/\n{2,}|\r\n\r\n+/)
+    .map((p) => removeTrailingSourceBoilerplate(p))
+    .filter(Boolean);
+
+  while (paragraphs.length > 0 && isLikelyPublisherFragment(paragraphs[paragraphs.length - 1])) {
+    paragraphs.pop();
+  }
+
+  return paragraphs.join("\n\n").trim();
 }
 
 function splitIntoParagraphs(text: string = "") {
@@ -364,6 +408,7 @@ function isJunkParagraph(paragraph: string = "") {
 
   if (!p) return true;
   if (p.length < 40) return true;
+  if (isLikelyPublisherFragment(p)) return true;
 
   const junkPatterns = [
     /^(photo|image|credit|caption)\b/,
@@ -385,6 +430,7 @@ function isJunkParagraph(paragraph: string = "") {
     /^more from\b/,
     /^source:?\b/,
     /^editor'?s note\b/,
+    /^earlier,?\s+gnn\b/,
   ];
 
   if (junkPatterns.some((pattern) => pattern.test(p))) {
@@ -406,6 +452,10 @@ function cleanArticleContent(rawContent: string = "") {
   const paragraphs = splitIntoParagraphs(cleaned)
     .map(removeTrailingSourceBoilerplate)
     .filter((p) => !isJunkParagraph(p));
+
+  while (paragraphs.length > 0 && isLikelyPublisherFragment(paragraphs[paragraphs.length - 1])) {
+    paragraphs.pop();
+  }
 
   return paragraphs.join("\n\n").trim();
 }
@@ -439,7 +489,9 @@ function truncateNicely(text: string, maxLength: number) {
   }
 
   truncated = removeTrailingSourceBoilerplate(truncated)
-    .replace(/\b(of|from|on|via|at|by)\s*$/gi, "")
+    .replace(/\b(Earlier|Earlier,)\s*$/gi, "")
+    .replace(/\b(GNN)\s*$/gi, "")
+    .replace(/\b(of|from|on|via|at|by|for|with)\s*$/gi, "")
     .replace(/[,:;–—-]\s*$/g, "")
     .trim();
 
@@ -460,6 +512,7 @@ function buildSummaryFromContent(cleanedContent: string, fallbackSummary: string
 
   for (const paragraph of paragraphs) {
     if (selected.length >= 3) break;
+    if (isLikelyPublisherFragment(paragraph)) continue;
 
     selected.push(paragraph);
     totalChars += paragraph.length;
