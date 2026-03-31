@@ -30,7 +30,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v15-summary-tail-hard-cleanup";
+const IMPORTER_VERSION = "scored-filter-v16-wapo-filter-image-upgrade";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -223,6 +223,56 @@ const SOFT_BLOCK_PATTERNS = [
   /cruise line cancels?/i,
 ];
 
+const ADVICE_COLUMN_PATTERNS = [
+  /^asking eric\b/i,
+  /^miss manners\b/i,
+  /^dear abby\b/i,
+  /^carolyn hax\b/i,
+  /^ask sahaj\b/i,
+  /^advice\b/i,
+  /\bam i enabling\b/i,
+  /\bmy boss'?s alcoholism\b/i,
+  /\btable manners\b/i,
+  /\betiquette\b/i,
+  /\bdear (abby|prudence)\b/i,
+  /\bask(ed|ing)?\s+(eric|amy|abby|sahaj)\b/i,
+  /\brelationship advice\b/i,
+  /\bworkplace advice\b/i,
+  /\bmanners\b/i,
+  /\blamenting the loss\b/i,
+];
+
+const WAPO_LIFESTYLE_BLOCK_PATTERNS = [
+  /^asking eric\b/i,
+  /^miss manners\b/i,
+  /^carolyn hax\b/i,
+  /^date lab\b/i,
+  /^solo-ish\b/i,
+  /^voraciously\b/i,
+  /^advice\b/i,
+  /\badvice column\b/i,
+  /\betiquette\b/i,
+  /\bmanners\b/i,
+  /\bshould i\b/i,
+  /\bam i wrong\b/i,
+  /\bam i enabling\b/i,
+  /\bmy husband\b/i,
+  /\bmy wife\b/i,
+  /\bmy partner\b/i,
+  /\bmy boyfriend\b/i,
+  /\bmy girlfriend\b/i,
+  /\bmy boss\b/i,
+  /\balcoholism\b/i,
+  /\bannoying\b/i,
+  /\brude\b/i,
+  /\bawkward\b/i,
+  /\bfamily drama\b/i,
+  /\bin-laws?\b/i,
+  /\bargument\b/i,
+  /\bfeud\b/i,
+  /\bcomplain(s|ing)?\b/i,
+];
+
 function slugify(text: string) {
   return text
     .toLowerCase()
@@ -253,8 +303,24 @@ function absoluteUrl(url: string, baseUrl: string) {
 
 function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
   if (!url) return null;
-  const cleaned = absoluteUrl(url.trim(), baseUrl);
+
+  const raw = url.trim();
+
+  if (
+    !raw ||
+    raw.startsWith("data:") ||
+    raw.startsWith("blob:") ||
+    /sprite|icon|logo|avatar|1x1|pixel/i.test(raw)
+  ) {
+    return null;
+  }
+
+  const cleaned = absoluteUrl(raw, baseUrl);
+
   if (!/^https?:\/\//i.test(cleaned)) return null;
+  if (/\.svg(\?|$)/i.test(cleaned)) return null;
+  if (/sprite|icon|logo|avatar|1x1|pixel/i.test(cleaned)) return null;
+
   return cleaned;
 }
 
@@ -634,18 +700,59 @@ function scoreText(text: string) {
   return score;
 }
 
+function isBlockedAdviceColumn(title: string, summary: string, content: string) {
+  const combined = `${title} ${summary} ${content}`.slice(0, 1500);
+  return ADVICE_COLUMN_PATTERNS.some((pattern) => pattern.test(combined));
+}
+
+function isBlockedWashingtonPostLifestyleStory(
+  sourceName: string,
+  title: string,
+  summary: string,
+  content: string
+) {
+  if (sourceName !== "Washington Post Lifestyle") return false;
+
+  const combined = `${title} ${summary} ${content}`.slice(0, 2000);
+  return WAPO_LIFESTYLE_BLOCK_PATTERNS.some((pattern) => pattern.test(combined));
+}
+
 function decideImportStory(
   title: string,
   summary: string,
   content: string,
   sourceWeight = 1,
-  trustedSource = false
+  trustedSource = false,
+  sourceName = ""
 ): ImportDecision {
   const titleText = title || "";
   const summaryText = summary || "";
   const contentText = content || "";
 
   const combinedHeadline = `${titleText} ${summaryText}`.trim();
+
+  if (isBlockedAdviceColumn(titleText, summaryText, contentText)) {
+    return {
+      accepted: false,
+      score: -5,
+      reason: "rejected as advice/etiquette/problem-column content",
+    };
+  }
+
+  if (
+    isBlockedWashingtonPostLifestyleStory(
+      sourceName,
+      titleText,
+      summaryText,
+      contentText
+    )
+  ) {
+    return {
+      accepted: false,
+      score: -5,
+      reason: "rejected as non-uplifting Washington Post Lifestyle column",
+    };
+  }
 
   if (trustedSource) {
     const headlineScore = scoreText(combinedHeadline);
@@ -752,8 +859,74 @@ function extractImageFromFeed(item: FeedItem, sourceUrl: string): string | null 
   );
 }
 
+function extractImageCandidatesFromJsonLd(html: string, articleUrl: string): string[] {
+  const candidates: string[] = [];
+  const scriptMatches = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
+
+  for (const scriptTag of scriptMatches) {
+    const jsonText = scriptTag
+      .replace(/^<script[^>]*>/i, "")
+      .replace(/<\/script>$/i, "")
+      .trim();
+
+    const imageMatches = [
+      ...jsonText.matchAll(/"image"\s*:\s*"([^"]+)"/gi),
+      ...jsonText.matchAll(/"url"\s*:\s*"([^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi),
+      ...jsonText.matchAll(/"contentUrl"\s*:\s*"([^"]+)"/gi),
+    ];
+
+    for (const match of imageMatches) {
+      const maybe = match[1]?.replace(/\\\//g, "/");
+      const cleaned = cleanImageUrl(maybe, articleUrl);
+      if (cleaned) candidates.push(cleaned);
+    }
+  }
+
+  return candidates;
+}
+
+function extractImageCandidatesFromScripts(html: string, articleUrl: string): string[] {
+  const candidates: string[] = [];
+
+  const matches = [
+    ...html.matchAll(/https?:\/\/[^"'\\\s>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"'\\\s>]*)?/gi),
+    ...html.matchAll(/"image"\s*:\s*"([^"]+)"/gi),
+    ...html.matchAll(/"hero-image"\s*:\s*"([^"]+)"/gi),
+    ...html.matchAll(/"promo_image"\s*:\s*"([^"]+)"/gi),
+  ];
+
+  for (const match of matches) {
+    const raw = (match[1] || match[0] || "").replace(/\\\//g, "/");
+    const cleaned = cleanImageUrl(raw, articleUrl);
+    if (cleaned) candidates.push(cleaned);
+  }
+
+  return candidates;
+}
+
+function pickBestImageCandidate(candidates: string[]): string | null {
+  const seen = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+
+    if (
+      /sprite|icon|logo|avatar|1x1|pixel/i.test(candidate) ||
+      /\.(svg)(\?|$)/i.test(candidate)
+    ) {
+      continue;
+    }
+
+    return candidate;
+  }
+
+  return null;
+}
+
 function extractBestImageFromHtml(html: string, articleUrl: string): string | null {
-  const patterns = [
+  const directPatterns = [
     /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
     /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i,
     /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/i,
@@ -762,6 +935,8 @@ function extractBestImageFromHtml(html: string, articleUrl: string): string | nu
     /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i,
     /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["'][^>]*>/i,
     /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image:src["'][^>]*>/i,
+    /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/i,
     /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["'][^>]*>/i,
     /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']image_src["'][^>]*>/i,
     /<img[^>]+data-lazy-src=["']([^"']+)["']/i,
@@ -770,7 +945,9 @@ function extractBestImageFromHtml(html: string, articleUrl: string): string | nu
     /<img[^>]+src=["']([^"']+)["']/i,
   ];
 
-  for (const pattern of patterns) {
+  const candidates: string[] = [];
+
+  for (const pattern of directPatterns) {
     const match = html.match(pattern)?.[1];
     if (!match) continue;
 
@@ -781,15 +958,18 @@ function extractBestImageFromHtml(html: string, articleUrl: string): string | nu
     }
 
     const cleaned = cleanImageUrl(candidate, articleUrl);
-    if (cleaned) return cleaned;
+    if (cleaned) candidates.push(cleaned);
   }
 
-  return null;
+  candidates.push(...extractImageCandidatesFromJsonLd(html, articleUrl));
+  candidates.push(...extractImageCandidatesFromScripts(html, articleUrl));
+
+  return pickBestImageCandidate(candidates);
 }
 
 async function extractImageFromArticlePage(articleUrl: string): Promise<string | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
   try {
     const response = await fetch(articleUrl, {
@@ -880,7 +1060,8 @@ export async function GET() {
               safeSummary,
               content,
               source.weight ?? 1,
-              source.trusted ?? false
+              source.trusted ?? false,
+              source.name
             );
 
             if (!decision.accepted) {
