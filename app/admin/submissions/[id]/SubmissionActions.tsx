@@ -147,6 +147,46 @@ export default function SubmissionActions({
     }
   }
 
+  async function handleDelete() {
+    const confirmed = window.confirm(
+      "Delete this submission? If it was already published, the linked story will also be deleted."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setLoadingAction("delete");
+      setMessage("");
+      setError("");
+
+      const response = await fetch(
+        `/api/admin/submissions/${submissionId}/delete`,
+        {
+          method: "POST",
+        }
+      );
+
+      const result = await readApiResponse(response);
+
+      if (!response.ok) {
+        console.error("Delete error response:", result);
+        setError(
+          result?.error ||
+            result?.rawText?.slice(0, 300) ||
+            "Failed to delete submission."
+        );
+        setLoadingAction(null);
+        return;
+      }
+
+      window.location.href = "/admin/submissions";
+    } catch (err) {
+      console.error("Delete request failed:", err);
+      setError("Failed to delete submission.");
+      setLoadingAction(null);
+    }
+  }
+
   const isPublished = status === "published";
 
   return (
@@ -180,6 +220,15 @@ export default function SubmissionActions({
         >
           {loadingAction === "publish" ? "Publishing..." : "Publish to Site"}
         </button>
+
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={loadingAction !== null}
+          className="rounded-xl bg-gray-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loadingAction === "delete" ? "Deleting..." : "Delete"}
+        </button>
       </div>
 
       {message ? (
@@ -189,7 +238,7 @@ export default function SubmissionActions({
       ) : null}
 
       {error ? (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 whitespace-pre-wrap break-words">
+        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm whitespace-pre-wrap break-words text-red-700">
           {error}
         </div>
       ) : null}

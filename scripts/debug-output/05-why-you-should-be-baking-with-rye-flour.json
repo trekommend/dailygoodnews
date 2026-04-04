@@ -1,0 +1,27 @@
+{
+  "title": "Why you should be baking with rye flour",
+  "source_url": "https://www.washingtonpost.com/food/2026/03/29/rye-flour-baking-tips/",
+  "status": 200,
+  "finalUrl": "https://www.washingtonpost.com/food/2026/03/29/rye-flour-baking-tips/",
+  "htmlTitle": "How to bake with rye flour in cookies, cakes and more - The Washington Post",
+  "counts": {
+    "meta": 1,
+    "jsonLd": 1,
+    "generic": 4,
+    "scripts": 63,
+    "total": 69
+  },
+  "sampleCandidates": [
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/LOID25H4ACK5JJQRYWLC3IIIB4.JPG&amp;w=1440",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/RUGLRTKULZB6XPESJMXXJVLTDI.jpeg&w=1440",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://author-service-images-prod-us-east-1.publishing.aws.arc.pub/washpost/5194d5a0-733b-4eaa-862a-99e7bbaee1a9.png&amp;h=196&amp;w=196",
+    "https://www.washingtonpost.com/dr/resources/images/generic-newsletter-signup.png",
+    "https://www.washingtonpost.com/dr/resources/images/generic-newsletter-signup.png",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/36EB4AIFS7GKGLTCSLLWI7S7AQ.JPG&amp;w=440",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/LOID25H4ACK5JJQRYWLC3IIIB4.JPG",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/LOID25H4ACK5JJQRYWLC3IIIB4.JPG",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/RUGLRTKULZB6XPESJMXXJVLTDI.jpeg",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/LOID25H4ACK5JJQRYWLC3IIIB4.JPG"
+  ],
+  "bestImage": "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/LOID25H4ACK5JJQRYWLC3IIIB4.JPG&amp;w=1440"
+}

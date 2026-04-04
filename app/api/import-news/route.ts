@@ -30,7 +30,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v16-wapo-filter-image-upgrade";
+const IMPORTER_VERSION = "scored-filter-v17-wapo-filter-image-summary-merged";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -301,10 +301,29 @@ function absoluteUrl(url: string, baseUrl: string) {
   }
 }
 
+function decodeHtmlEntities(text: string) {
+  return text
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"')
+    .replace(/&#8230;/g, "...")
+    .replace(/&#8242;/g, "'")
+    .replace(/&#8243;/g, '"')
+    .replace(/&#038;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
 function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
   if (!url) return null;
 
-  const raw = url.trim();
+  const raw = decodeHtmlEntities(url.trim());
 
   if (
     !raw ||
@@ -320,25 +339,9 @@ function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
   if (!/^https?:\/\//i.test(cleaned)) return null;
   if (/\.svg(\?|$)/i.test(cleaned)) return null;
   if (/sprite|icon|logo|avatar|1x1|pixel/i.test(cleaned)) return null;
+  if (/generic-newsletter-signup/i.test(cleaned)) return null;
 
   return cleaned;
-}
-
-function decodeHtmlEntities(text: string) {
-  return text
-    .replace(/&#8217;/g, "'")
-    .replace(/&#8216;/g, "'")
-    .replace(/&#8220;/g, '"')
-    .replace(/&#8221;/g, '"')
-    .replace(/&#8230;/g, "...")
-    .replace(/&#8242;/g, "'")
-    .replace(/&#8243;/g, '"')
-    .replace(/&#038;/g, "&")
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&nbsp;/g, " ");
 }
 
 function stripHtml(html: string) {
@@ -859,9 +862,36 @@ function extractImageFromFeed(item: FeedItem, sourceUrl: string): string | null 
   );
 }
 
+function extractImageCandidatesFromMeta(html: string, articleUrl: string): string[] {
+  const patterns = [
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/gi,
+    /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/gi,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/gi,
+    /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image:src["'][^>]*>/gi,
+    /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/gi,
+  ];
+
+  const candidates: string[] = [];
+
+  for (const pattern of patterns) {
+    for (const match of html.matchAll(pattern)) {
+      const cleaned = cleanImageUrl(match[1], articleUrl);
+      if (cleaned) candidates.push(cleaned);
+    }
+  }
+
+  return candidates;
+}
+
 function extractImageCandidatesFromJsonLd(html: string, articleUrl: string): string[] {
   const candidates: string[] = [];
-  const scriptMatches = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
+  const scriptMatches =
+    html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
 
   for (const scriptTag of scriptMatches) {
     const jsonText = scriptTag
@@ -871,8 +901,8 @@ function extractImageCandidatesFromJsonLd(html: string, articleUrl: string): str
 
     const imageMatches = [
       ...jsonText.matchAll(/"image"\s*:\s*"([^"]+)"/gi),
-      ...jsonText.matchAll(/"url"\s*:\s*"([^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi),
       ...jsonText.matchAll(/"contentUrl"\s*:\s*"([^"]+)"/gi),
+      ...jsonText.matchAll(/"url"\s*:\s*"([^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi),
     ];
 
     for (const match of imageMatches) {
@@ -885,20 +915,52 @@ function extractImageCandidatesFromJsonLd(html: string, articleUrl: string): str
   return candidates;
 }
 
+function extractImageCandidatesFromGenericHtml(html: string, articleUrl: string): string[] {
+  const candidates: string[] = [];
+
+  const patterns = [
+    /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["'][^>]*>/gi,
+    /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']image_src["'][^>]*>/gi,
+    /<img[^>]+data-lazy-src=["']([^"']+)["']/gi,
+    /<img[^>]+data-src=["']([^"']+)["']/gi,
+    /<img[^>]+src=["']([^"']+)["']/gi,
+    /<amp-img[^>]+src=["']([^"']+)["']/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of html.matchAll(pattern)) {
+      const cleaned = cleanImageUrl(match[1], articleUrl);
+      if (cleaned) candidates.push(cleaned);
+    }
+  }
+
+  for (const match of html.matchAll(/<img[^>]+srcset=["']([^"']+)["']/gi)) {
+    const first = match[1]?.split(",")[0]?.trim().split(" ")[0];
+    const cleaned = cleanImageUrl(first, articleUrl);
+    if (cleaned) candidates.push(cleaned);
+  }
+
+  return candidates;
+}
+
 function extractImageCandidatesFromScripts(html: string, articleUrl: string): string[] {
   const candidates: string[] = [];
 
-  const matches = [
-    ...html.matchAll(/https?:\/\/[^"'\\\s>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"'\\\s>]*)?/gi),
-    ...html.matchAll(/"image"\s*:\s*"([^"]+)"/gi),
-    ...html.matchAll(/"hero-image"\s*:\s*"([^"]+)"/gi),
-    ...html.matchAll(/"promo_image"\s*:\s*"([^"]+)"/gi),
+  const patterns = [
+    /https?:\/\/[^"'\\\s>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"'\\\s>]*)?/gi,
+    /"image"\s*:\s*"([^"]+)"/gi,
+    /"hero-image"\s*:\s*"([^"]+)"/gi,
+    /"promo_image"\s*:\s*"([^"]+)"/gi,
+    /"url"\s*:\s*"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi,
+    /"originalUrl"\s*:\s*"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi,
   ];
 
-  for (const match of matches) {
-    const raw = (match[1] || match[0] || "").replace(/\\\//g, "/");
-    const cleaned = cleanImageUrl(raw, articleUrl);
-    if (cleaned) candidates.push(cleaned);
+  for (const pattern of patterns) {
+    for (const match of html.matchAll(pattern)) {
+      const raw = (match[1] || match[0] || "").replace(/\\\//g, "/");
+      const cleaned = cleanImageUrl(raw, articleUrl);
+      if (cleaned) candidates.push(cleaned);
+    }
   }
 
   return candidates;
@@ -914,7 +976,8 @@ function pickBestImageCandidate(candidates: string[]): string | null {
 
     if (
       /sprite|icon|logo|avatar|1x1|pixel/i.test(candidate) ||
-      /\.(svg)(\?|$)/i.test(candidate)
+      /\.(svg)(\?|$)/i.test(candidate) ||
+      /generic-newsletter-signup/i.test(candidate)
     ) {
       continue;
     }
@@ -926,58 +989,33 @@ function pickBestImageCandidate(candidates: string[]): string | null {
 }
 
 function extractBestImageFromHtml(html: string, articleUrl: string): string | null {
-  const directPatterns = [
-    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i,
-    /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/i,
-    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/i,
-    /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image:src["'][^>]*>/i,
-    /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/i,
-    /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["'][^>]*>/i,
-    /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']image_src["'][^>]*>/i,
-    /<img[^>]+data-lazy-src=["']([^"']+)["']/i,
-    /<img[^>]+data-src=["']([^"']+)["']/i,
-    /<img[^>]+srcset=["']([^"']+)["']/i,
-    /<img[^>]+src=["']([^"']+)["']/i,
-  ];
+  const meta = extractImageCandidatesFromMeta(html, articleUrl);
+  const jsonLd = extractImageCandidatesFromJsonLd(html, articleUrl);
+  const generic = extractImageCandidatesFromGenericHtml(html, articleUrl);
+  const scripts = extractImageCandidatesFromScripts(html, articleUrl);
 
-  const candidates: string[] = [];
-
-  for (const pattern of directPatterns) {
-    const match = html.match(pattern)?.[1];
-    if (!match) continue;
-
-    let candidate = match;
-
-    if (pattern.source.includes("srcset")) {
-      candidate = match.split(",")[0]?.trim().split(" ")[0] ?? "";
-    }
-
-    const cleaned = cleanImageUrl(candidate, articleUrl);
-    if (cleaned) candidates.push(cleaned);
-  }
-
-  candidates.push(...extractImageCandidatesFromJsonLd(html, articleUrl));
-  candidates.push(...extractImageCandidatesFromScripts(html, articleUrl));
-
-  return pickBestImageCandidate(candidates);
+  const all = [...meta, ...jsonLd, ...generic, ...scripts];
+  return pickBestImageCandidate(all);
 }
 
 async function extractImageFromArticlePage(articleUrl: string): Promise<string | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
     const response = await fetch(articleUrl, {
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari DailyGoodNewsBot/1.0",
-        Accept: "text/html,application/xhtml+xml",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        Referer: "https://www.google.com/",
+        "Upgrade-Insecure-Requests": "1",
       },
+      redirect: "follow",
       cache: "no-store",
       signal: controller.signal,
     });

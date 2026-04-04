@@ -16,6 +16,8 @@ type Story = {
   source_url: string;
   source_name: string | null;
   publish_date: string | null;
+  is_reader_submission?: boolean | null;
+  submitted_by_name?: string | null;
 };
 
 async function getStory(slug: string): Promise<Story | null> {
@@ -69,7 +71,7 @@ function removeTrailingSourceBoilerplate(text: string) {
     .replace(/\bCourtesy of .*?$/gi, "")
     .replace(/\bvia .*?$/gi, "")
     .replace(
-      /\s+(of|on|from)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post)\.?$/gi,
+      /\s+(of|on|from)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post|ESPN)\.?$/gi,
       ""
     )
     .trim();
@@ -284,20 +286,30 @@ export default async function StoryPage({ params }: StoryPageProps) {
           lineHeight: 1.6,
         }}
       >
-        Originally published on{" "}
-        <a
-          href={story.source_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            color: "#0f172a",
-            fontWeight: 600,
-            textDecoration: "underline",
-          }}
-        >
-          {story.source_name || "the original source"}
-        </a>
-        .
+        {story.source_url && story.source_name ? (
+          <div style={{ marginBottom: story.is_reader_submission && story.submitted_by_name ? 8 : 0 }}>
+            Originally published on{" "}
+            <a
+              href={story.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: "#0f172a",
+                fontWeight: 600,
+                textDecoration: "underline",
+              }}
+            >
+              {story.source_name}
+            </a>
+            .
+          </div>
+        ) : null}
+
+        {story.is_reader_submission && story.submitted_by_name ? (
+          <div>
+            Submitted by <span style={{ fontWeight: 600 }}>{story.submitted_by_name}</span>
+          </div>
+        ) : null}
       </div>
     </article>
   );

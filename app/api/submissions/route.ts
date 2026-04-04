@@ -22,7 +22,6 @@ const blockedTerms = [
 ];
 
 const blockedDomains = [
-  // Adult / explicit
   "pornhub.com",
   "xvideos.com",
   "xnxx.com",
@@ -33,8 +32,6 @@ const blockedDomains = [
   "chaturbate.com",
   "stripchat.com",
   "camsoda.com",
-
-  // URL shorteners / spam-prone
   "bit.ly",
   "tinyurl.com",
   "t.co",
@@ -43,8 +40,6 @@ const blockedDomains = [
   "rb.gy",
   "is.gd",
   "buff.ly",
-
-  // Add your own known-bad domains here over time
   "spam-example.com",
 ];
 
@@ -58,10 +53,23 @@ const suspiciousTlds = [
   ".tk",
 ];
 
+const allowedCategories = new Set([
+  "animals",
+  "health",
+  "community",
+  "kindness",
+  "hope",
+]);
+
 const submissionSchema = z
   .object({
     submission_type: z.enum(["original_story", "article_link"]),
-    title: z.string().trim().min(3, "Please enter a title.").max(200),
+    title: z
+      .string()
+      .trim()
+      .max(200, "Title must be 200 characters or less.")
+      .optional()
+      .or(z.literal("")),
     summary: z
       .string()
       .trim()
@@ -81,7 +89,7 @@ const submissionSchema = z
       .max(150, "Publication name is too long.")
       .optional()
       .or(z.literal("")),
-    author_name: z.string().trim().min(2, "Please enter your name.").max(120),
+    author_name: z.string().trim().min(2, "Please enter your username.").max(120),
     author_email: z
       .string()
       .trim()
@@ -104,6 +112,7 @@ const submissionSchema = z
       .url("Please enter a valid image URL.")
       .optional()
       .or(z.literal("")),
+    category_slug: z.string().optional().or(z.literal("")),
     consent_original: z.boolean().optional(),
     consent_publication_rights: z.boolean().optional(),
     consent_terms: z.boolean(),
@@ -118,7 +127,27 @@ const submissionSchema = z
       });
     }
 
+    if (
+      data.category_slug &&
+      data.category_slug.trim().length > 0 &&
+      !allowedCategories.has(data.category_slug.trim().toLowerCase())
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["category_slug"],
+        message: "Please choose a valid category.",
+      });
+    }
+
     if (data.submission_type === "original_story") {
+      if (!data.title || data.title.trim().length < 3) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["title"],
+          message: "Please enter a title.",
+        });
+      }
+
       if (!data.content || data.content.trim().length < 100) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -142,14 +171,6 @@ const submissionSchema = z
           code: z.ZodIssueCode.custom,
           path: ["source_url"],
           message: "Please provide the article URL.",
-        });
-      }
-
-      if (!data.source_name || data.source_name.trim().length < 2) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["source_name"],
-          message: "Please provide the publication name.",
         });
       }
 
@@ -290,6 +311,238 @@ function buildModerationNotes(parsed: z.infer<typeof submissionSchema>) {
   return notes.length ? notes.join(" | ") : null;
 }
 
+function decodeHtmlEntities(text: string) {
+  return text
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"')
+    .replace(/&#8230;/g, "...")
+    .replace(/&#8242;/g, "'")
+    .replace(/&#8243;/g, '"')
+    .replace(/&#038;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function absoluteUrl(url: string, baseUrl: string) {
+  try {
+    return new URL(url, baseUrl).toString();
+  } catch {
+    return url;
+  }
+}
+
+function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
+  if (!url) return null;
+
+  const raw = decodeHtmlEntities(url.trim());
+
+  if (
+    !raw ||
+    raw.startsWith("data:") ||
+    raw.startsWith("blob:") ||
+    /sprite|icon|logo|avatar|1x1|pixel/i.test(raw)
+  ) {
+    return null;
+  }
+
+  const cleaned = absoluteUrl(raw, baseUrl);
+
+  if (!/^https?:\/\//i.test(cleaned)) return null;
+  if (/\.svg(\?|$)/i.test(cleaned)) return null;
+  if (/sprite|icon|logo|avatar|1x1|pixel/i.test(cleaned)) return null;
+  if (/generic-newsletter-signup/i.test(cleaned)) return null;
+
+  return cleaned;
+}
+
+function inferPublicationNameFromUrl(url: string) {
+  const domain = getDomainFromUrl(url);
+
+  const known: Record<string, string> = {
+    "espn.com": "ESPN",
+    "washingtonpost.com": "Washington Post",
+    "goodnewsnetwork.org": "Good News Network",
+    "positive.news": "Positive News",
+    "goodgoodgood.co": "Good Good Good",
+    "foxnews.com": "Fox News",
+    "nytimes.com": "New York Times",
+    "theguardian.com": "The Guardian",
+    "bbc.com": "BBC",
+    "bbc.co.uk": "BBC",
+    "cnn.com": "CNN",
+    "npr.org": "NPR",
+    "apnews.com": "AP News",
+    "reuters.com": "Reuters",
+  };
+
+  if (known[domain]) return known[domain];
+
+  const base = domain.split(".")[0] || domain;
+  return base
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function guessTitleFromUrl(url: string) {
+  try {
+    const pathname = new URL(url).pathname;
+    const last = pathname.split("/").filter(Boolean).pop() || "";
+    if (!last) return "Submitted article";
+
+    return last
+      .replace(/[-_]+/g, " ")
+      .replace(/\.[a-z0-9]+$/i, "")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  } catch {
+    return "Submitted article";
+  }
+}
+
+function normalizeExtractedTitle(title: string) {
+  const cleaned = decodeHtmlEntities(title)
+    .replace(/\s*[-|–—]\s*(ESPN|Washington Post|Good News Network|Positive News|Good Good Good|Fox News|CNN|BBC|Reuters|AP News|NPR|New York Times|The Guardian)\s*$/i, "")
+    .trim();
+
+  return cleaned || title.trim();
+}
+
+function extractMetaContent(html: string, patterns: RegExp[]) {
+  for (const pattern of patterns) {
+    const match = html.match(pattern)?.[1] ?? html.match(pattern)?.[2];
+    if (match) {
+      return decodeHtmlEntities(match.trim());
+    }
+  }
+  return "";
+}
+
+async function extractArticlePreview(url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        Referer: "https://www.google.com/",
+        "Upgrade-Insecure-Requests": "1",
+      },
+      redirect: "follow",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return {
+        title: "",
+        summary: "",
+        sourceName: "",
+        imageUrl: null as string | null,
+      };
+    }
+
+    const html = await response.text();
+
+    const title =
+      normalizeExtractedTitle(
+        extractMetaContent(html, [
+          /<meta[^>]+property=["']og:title["'][^>]+content="([^"]+)"[^>]*>/i,
+          /<meta[^>]+property=["']og:title["'][^>]+content='([^']+)'[^>]*>/i,
+          /<meta[^>]+content="([^"]+)"[^>]+property=["']og:title["'][^>]*>/i,
+          /<meta[^>]+content='([^']+)'[^>]+property=["']og:title["'][^>]*>/i,
+          /<meta[^>]+name=["']twitter:title["'][^>]+content="([^"]+)"[^>]*>/i,
+          /<meta[^>]+name=["']twitter:title["'][^>]+content='([^']+)'[^>]*>/i,
+          /<meta[^>]+content="([^"]+)"[^>]+name=["']twitter:title["'][^>]*>/i,
+          /<meta[^>]+content='([^']+)'[^>]+name=["']twitter:title["'][^>]*>/i,
+          /<title[^>]*>([\s\S]*?)<\/title>/i,
+        ])
+      ) || guessTitleFromUrl(url);
+
+    const summary = extractMetaContent(html, [
+      /<meta[^>]+property=["']og:description["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+property=["']og:description["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+property=["']og:description["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+property=["']og:description["'][^>]*>/i,
+      /<meta[^>]+name=["']description["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+name=["']description["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+name=["']description["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+name=["']description["'][^>]*>/i,
+      /<meta[^>]+name=["']twitter:description["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+name=["']twitter:description["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+name=["']twitter:description["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+name=["']twitter:description["'][^>]*>/i,
+    ]);
+
+    const sourceName =
+      extractMetaContent(html, [
+        /<meta[^>]+property=["']og:site_name["'][^>]+content="([^"]+)"[^>]*>/i,
+        /<meta[^>]+property=["']og:site_name["'][^>]+content='([^']+)'[^>]*>/i,
+        /<meta[^>]+content="([^"]+)"[^>]+property=["']og:site_name["'][^>]*>/i,
+        /<meta[^>]+content='([^']+)'[^>]+property=["']og:site_name["'][^>]*>/i,
+        /<meta[^>]+name=["']application-name["'][^>]+content="([^"]+)"[^>]*>/i,
+        /<meta[^>]+name=["']application-name["'][^>]+content='([^']+)'[^>]*>/i,
+        /<meta[^>]+content="([^"]+)"[^>]+name=["']application-name["'][^>]*>/i,
+        /<meta[^>]+content='([^']+)'[^>]+name=["']application-name["'][^>]*>/i,
+      ]) || inferPublicationNameFromUrl(url);
+
+    const imagePatterns = [
+      /<meta[^>]+property=["']og:image["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+property=["']og:image["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+property=["']og:image["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+property=["']og:image["'][^>]*>/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+name=["']twitter:image["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+name=["']twitter:image["'][^>]*>/i,
+      /<meta[^>]+name=["']twitter:image:src["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+name=["']twitter:image:src["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+name=["']twitter:image:src["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+name=["']twitter:image:src["'][^>]*>/i,
+    ];
+
+    let imageUrl: string | null = null;
+    for (const pattern of imagePatterns) {
+      const match = html.match(pattern)?.[1];
+      const cleaned = cleanImageUrl(match, url);
+      if (cleaned) {
+        imageUrl = cleaned;
+        break;
+      }
+    }
+
+    return {
+      title,
+      summary,
+      sourceName,
+      imageUrl,
+    };
+  } catch {
+    return {
+      title: guessTitleFromUrl(url),
+      summary: "",
+      sourceName: inferPublicationNameFromUrl(url),
+      imageUrl: null,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function checkGoogleSafeBrowsing(urlToCheck: string) {
   const apiKey = process.env.GOOGLE_SAFE_BROWSING_API_KEY;
 
@@ -378,7 +631,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const parsed = submissionSchema.parse(body);
 
-    // Honeypot
     if (parsed.website && parsed.website.trim().length > 0) {
       return NextResponse.json({ success: true });
     }
@@ -400,7 +652,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (hasSpammyPatterns(parsed.title)) {
+    if (parsed.title && hasSpammyPatterns(parsed.title)) {
       return NextResponse.json(
         {
           error:
@@ -464,7 +716,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Google Safe Browsing checks
     if (parsed.source_url) {
       const safeBrowsingResult = await checkGoogleSafeBrowsing(parsed.source_url);
 
@@ -544,18 +795,35 @@ export async function POST(req: Request) {
       }
     }
 
-    const cleanTitle = parsed.title.trim();
-    const cleanSummary = parsed.summary?.trim() || null;
+    let cleanTitle = parsed.title?.trim() || "";
+    let cleanSummary = parsed.summary?.trim() || null;
     const cleanContent = parsed.content?.trim() || null;
     const cleanSourceUrl = parsed.source_url?.trim() || null;
-    const cleanSourceName = parsed.source_name?.trim() || null;
+    let cleanSourceName = parsed.source_name?.trim() || null;
     const cleanAuthorName = parsed.author_name.trim();
     const cleanAuthorEmail = parsed.author_email.trim().toLowerCase();
     const cleanAuthorBio = parsed.author_bio?.trim() || null;
     const cleanLocationText = parsed.location_text?.trim() || null;
-    const cleanImageUrl = parsed.image_url?.trim() || null;
+    let cleanImageUrlValue = parsed.image_url?.trim() || null;
+    const cleanCategorySlug =
+      parsed.category_slug && allowedCategories.has(parsed.category_slug.trim().toLowerCase())
+        ? parsed.category_slug.trim().toLowerCase()
+        : null;
 
-    const slug = slugify(cleanTitle);
+    if (parsed.submission_type === "article_link" && cleanSourceUrl) {
+      const preview = await extractArticlePreview(cleanSourceUrl);
+
+      cleanTitle = cleanTitle || preview.title || guessTitleFromUrl(cleanSourceUrl);
+      cleanSummary = cleanSummary || preview.summary || null;
+      cleanSourceName = cleanSourceName || preview.sourceName || inferPublicationNameFromUrl(cleanSourceUrl);
+      cleanImageUrlValue = cleanImageUrlValue || preview.imageUrl || null;
+    }
+
+    if (parsed.submission_type === "original_story") {
+      cleanTitle = cleanTitle.trim();
+    }
+
+    const slug = slugify(cleanTitle || "submitted-article");
 
     if (parsed.submission_type === "original_story") {
       const { data: similarOriginal, error: similarOriginalError } = await supabase
@@ -590,7 +858,7 @@ export async function POST(req: Request) {
     const insertPayload = {
       submission_type: parsed.submission_type,
       status: "pending",
-      title: cleanTitle,
+      title: cleanTitle || "Submitted article",
       slug: slug || null,
       summary: cleanSummary,
       content: cleanContent,
@@ -600,7 +868,8 @@ export async function POST(req: Request) {
       author_email: cleanAuthorEmail,
       author_bio: cleanAuthorBio,
       location_text: cleanLocationText,
-      image_url: cleanImageUrl,
+      image_url: cleanImageUrlValue,
+      category_slug: cleanCategorySlug,
       consent_original: !!parsed.consent_original,
       consent_publication_rights: !!parsed.consent_publication_rights,
       consent_terms: parsed.consent_terms,
@@ -626,9 +895,13 @@ export async function POST(req: Request) {
         ? "Original story submission created"
         : "Article link submission created";
 
+    const categoryNote = cleanCategorySlug
+      ? ` | Category selected: ${cleanCategorySlug}`
+      : "";
+
     const combinedEventNote = moderationNotes
-      ? `${creationNote} | ${moderationNotes}`
-      : creationNote;
+      ? `${creationNote}${categoryNote} | ${moderationNotes}`
+      : `${creationNote}${categoryNote}`;
 
     const { error: eventError } = await supabase
       .from("reader_submission_events")

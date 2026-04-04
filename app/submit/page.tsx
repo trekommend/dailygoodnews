@@ -15,6 +15,7 @@ type FormState = {
   author_bio: string;
   location_text: string;
   image_url: string;
+  category_slug: string;
   consent_original: boolean;
   consent_publication_rights: boolean;
   consent_terms: boolean;
@@ -25,6 +26,15 @@ type ValidationIssue = {
   path?: string[];
   message?: string;
 };
+
+const CATEGORY_OPTIONS = [
+  { value: "", label: "Let Daily Good News choose" },
+  { value: "animals", label: "Animals" },
+  { value: "health", label: "Health" },
+  { value: "community", label: "Community" },
+  { value: "kindness", label: "Kindness" },
+  { value: "hope", label: "Hope" },
+];
 
 const initialFormState: FormState = {
   title: "",
@@ -37,6 +47,7 @@ const initialFormState: FormState = {
   author_bio: "",
   location_text: "",
   image_url: "",
+  category_slug: "",
   consent_original: false,
   consent_publication_rights: false,
   consent_terms: false,
@@ -409,87 +420,150 @@ export default function SubmitPage() {
                 gap: 24,
               }}
             >
-              <div>
-                <div
-                  style={{
-                    marginBottom: 8,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 16,
-                  }}
-                >
+              {submissionType === "article_link" ? (
+                <div>
                   <label
-                    htmlFor="title"
-                    style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}
+                    htmlFor="source_url"
+                    style={{
+                      display: "block",
+                      marginBottom: 8,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "#111827",
+                    }}
                   >
-                    Title
+                    Article URL
                   </label>
-                  <span style={{ fontSize: 12, color: "#9ca3af" }}>
-                    {titleCount}/200
-                  </span>
+                  <input
+                    id="source_url"
+                    type="url"
+                    value={form.source_url}
+                    onChange={(e) => updateField("source_url", e.target.value)}
+                    placeholder="https://example.com/story"
+                    style={{
+                      width: "100%",
+                      border: "1px solid #d1d5db",
+                      borderRadius: 16,
+                      padding: "14px 16px",
+                      fontSize: 15,
+                    }}
+                  />
+                  <FieldError message={fieldErrors.source_url} />
                 </div>
-                <input
-                  id="title"
-                  type="text"
-                  value={form.title}
-                  onChange={(e) => updateField("title", e.target.value)}
-                  placeholder={
-                    submissionType === "original_story"
-                      ? "Example: Our neighborhood turned an empty lot into a community garden"
-                      : "Example: A city library erased late fees and tripled membership"
-                  }
-                  style={{
-                    width: "100%",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 16,
-                    padding: "14px 16px",
-                    fontSize: 15,
-                  }}
-                />
-                <FieldError message={fieldErrors.title} />
-              </div>
+              ) : null}
+
+              {submissionType === "original_story" ? (
+                <>
+                  <div>
+                    <div
+                      style={{
+                        marginBottom: 8,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 16,
+                      }}
+                    >
+                      <label
+                        htmlFor="title"
+                        style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}
+                      >
+                        Title
+                      </label>
+                      <span style={{ fontSize: 12, color: "#9ca3af" }}>
+                        {titleCount}/200
+                      </span>
+                    </div>
+                    <input
+                      id="title"
+                      type="text"
+                      value={form.title}
+                      onChange={(e) => updateField("title", e.target.value)}
+                      placeholder="Example: Our neighborhood turned an empty lot into a community garden"
+                      style={{
+                        width: "100%",
+                        border: "1px solid #d1d5db",
+                        borderRadius: 16,
+                        padding: "14px 16px",
+                        fontSize: 15,
+                      }}
+                    />
+                    <FieldError message={fieldErrors.title} />
+                  </div>
+
+                  <div>
+                    <div
+                      style={{
+                        marginBottom: 8,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 16,
+                      }}
+                    >
+                      <label
+                        htmlFor="summary"
+                        style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}
+                      >
+                        Short description
+                      </label>
+                      <span style={{ fontSize: 12, color: "#9ca3af" }}>
+                        {summaryCount}/500
+                      </span>
+                    </div>
+                    <textarea
+                      id="summary"
+                      rows={4}
+                      value={form.summary}
+                      onChange={(e) => updateField("summary", e.target.value)}
+                      placeholder="Give a short summary of your story."
+                      style={{
+                        width: "100%",
+                        border: "1px solid #d1d5db",
+                        borderRadius: 16,
+                        padding: "14px 16px",
+                        fontSize: 15,
+                        resize: "vertical",
+                      }}
+                    />
+                    <FieldError message={fieldErrors.summary} />
+                  </div>
+                </>
+              ) : null}
 
               <div>
-                <div
+                <label
+                  htmlFor="category_slug"
                   style={{
+                    display: "block",
                     marginBottom: 8,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 16,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#111827",
                   }}
                 >
-                  <label
-                    htmlFor="summary"
-                    style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}
-                  >
-                    Short description
-                  </label>
-                  <span style={{ fontSize: 12, color: "#9ca3af" }}>
-                    {summaryCount}/500
-                  </span>
-                </div>
-                <textarea
-                  id="summary"
-                  rows={4}
-                  value={form.summary}
-                  onChange={(e) => updateField("summary", e.target.value)}
-                  placeholder={
-                    submissionType === "original_story"
-                      ? "Give a short summary of your story."
-                      : "Briefly explain why this article fits Daily Good News."
-                  }
+                  Category (optional)
+                </label>
+                <select
+                  id="category_slug"
+                  value={form.category_slug}
+                  onChange={(e) => updateField("category_slug", e.target.value)}
                   style={{
                     width: "100%",
                     border: "1px solid #d1d5db",
                     borderRadius: 16,
                     padding: "14px 16px",
                     fontSize: 15,
-                    resize: "vertical",
+                    background: "#fff",
                   }}
-                />
-                <FieldError message={fieldErrors.summary} />
+                >
+                  {CATEGORY_OPTIONS.map((option) => (
+                    <option key={option.value || "auto"} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <FieldError message={fieldErrors.category_slug} />
               </div>
 
               {submissionType === "original_story" ? (
@@ -539,72 +613,35 @@ export default function SubmitPage() {
                   <FieldError message={fieldErrors.content} />
                 </div>
               ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 24,
-                  }}
-                >
-                  <div>
-                    <label
-                      htmlFor="source_url"
-                      style={{
-                        display: "block",
-                        marginBottom: 8,
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: "#111827",
-                      }}
-                    >
-                      Article URL
-                    </label>
-                    <input
-                      id="source_url"
-                      type="url"
-                      value={form.source_url}
-                      onChange={(e) => updateField("source_url", e.target.value)}
-                      placeholder="https://example.com/story"
-                      style={{
-                        width: "100%",
-                        border: "1px solid #d1d5db",
-                        borderRadius: 16,
-                        padding: "14px 16px",
-                        fontSize: 15,
-                      }}
-                    />
-                    <FieldError message={fieldErrors.source_url} />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="source_name"
-                      style={{
-                        display: "block",
-                        marginBottom: 8,
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: "#111827",
-                      }}
-                    >
-                      Publication name
-                    </label>
-                    <input
-                      id="source_name"
-                      type="text"
-                      value={form.source_name}
-                      onChange={(e) => updateField("source_name", e.target.value)}
-                      placeholder="Example: Positive News"
-                      style={{
-                        width: "100%",
-                        border: "1px solid #d1d5db",
-                        borderRadius: 16,
-                        padding: "14px 16px",
-                        fontSize: 15,
-                      }}
-                    />
-                    <FieldError message={fieldErrors.source_name} />
-                  </div>
+                <div>
+                  <label
+                    htmlFor="content"
+                    style={{
+                      display: "block",
+                      marginBottom: 8,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "#111827",
+                    }}
+                  >
+                    Notes for editors (optional)
+                  </label>
+                  <textarea
+                    id="content"
+                    rows={5}
+                    value={form.content}
+                    onChange={(e) => updateField("content", e.target.value)}
+                    placeholder="Optional context for the editors. This will not be used as the article summary."
+                    style={{
+                      width: "100%",
+                      border: "1px solid #d1d5db",
+                      borderRadius: 16,
+                      padding: "14px 16px",
+                      fontSize: 15,
+                      resize: "vertical",
+                    }}
+                  />
+                  <FieldError message={fieldErrors.content} />
                 </div>
               )}
 
@@ -677,14 +714,14 @@ export default function SubmitPage() {
                     color: "#111827",
                   }}
                 >
-                  Your name
+                  Username
                 </label>
                 <input
                   id="author_name"
                   type="text"
                   value={form.author_name}
                   onChange={(e) => updateField("author_name", e.target.value)}
-                  placeholder="Your name"
+                  placeholder="Your username"
                   style={{
                     width: "100%",
                     border: "1px solid #d1d5db",

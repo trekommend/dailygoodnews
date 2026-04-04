@@ -1,0 +1,27 @@
+{
+  "title": "Exhausted during a ‘relaxing’ vacation? Waking early is the first way to fix it.",
+  "source_url": "https://www.washingtonpost.com/travel/2026/03/30/jetlag-sleep-vacation-circadian/",
+  "status": 200,
+  "finalUrl": "https://www.washingtonpost.com/travel/2026/03/30/jetlag-sleep-vacation-circadian/",
+  "htmlTitle": "Feeling exhausted on vacation? It could be your zeitgebers. - The Washington Post",
+  "counts": {
+    "meta": 1,
+    "jsonLd": 1,
+    "generic": 4,
+    "scripts": 91,
+    "total": 97
+  },
+  "sampleCandidates": [
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/AVKAFPQX5JGXDHUCXN246AW6MY.jpg&amp;w=1440",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/RUGLRTKULZB6XPESJMXXJVLTDI.jpeg&w=1440",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://s3.amazonaws.com/arc-authors/washpost/9cf2cd57-bd06-411f-9a18-0b8ac7faee64.png&amp;h=196&amp;w=196",
+    "https://www.washingtonpost.com/dr/resources/images/generic-newsletter-signup.png",
+    "https://www.washingtonpost.com/dr/resources/images/generic-newsletter-signup.png",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/WHFVMKMQLRBNFMRWZPKCDH5624.jpg&amp;w=440",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/AVKAFPQX5JGXDHUCXN246AW6MY.jpg",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/AVKAFPQX5JGXDHUCXN246AW6MY.jpg",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/RUGLRTKULZB6XPESJMXXJVLTDI.jpeg",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/AVKAFPQX5JGXDHUCXN246AW6MY.jpg"
+  ],
+  "bestImage": "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/AVKAFPQX5JGXDHUCXN246AW6MY.jpg&amp;w=1440"
+}

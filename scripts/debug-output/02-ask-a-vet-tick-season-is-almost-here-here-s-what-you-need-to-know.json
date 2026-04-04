@@ -1,0 +1,27 @@
+{
+  "title": "Ask a Vet: Tick season is almost here. Here’s what you need to know.",
+  "source_url": "https://www.washingtonpost.com/home/2026/03/30/advice-tick-illnesses-dogs/",
+  "status": 200,
+  "finalUrl": "https://www.washingtonpost.com/home/2026/03/30/advice-tick-illnesses-dogs/",
+  "htmlTitle": "What to know about dogs and tick-borne illnesses - The Washington Post",
+  "counts": {
+    "meta": 1,
+    "jsonLd": 1,
+    "generic": 7,
+    "scripts": 97,
+    "total": 106
+  },
+  "sampleCandidates": [
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/24SGXM5GJOYJZY55HEJDMBDPXY.jpg&amp;w=1440",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/RUGLRTKULZB6XPESJMXXJVLTDI.jpeg&w=1440",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://author-service-images-prod-us-east-1.publishing.aws.arc.pub/washpost/23b9b75c-a9c7-4f3e-a2c1-e1784f13f6b4.png&amp;h=196&amp;w=196",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/RUGLRTKULZB6XPESJMXXJVLTDI.jpeg&amp;w=1440&amp;w=767&amp;h=511",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/RUGLRTKULZB6XPESJMXXJVLTDI.jpeg&amp;w=1440&amp;w=767&amp;h=511",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://www.washingtonpost.com/wp-apps/imrs.php?src=https://arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com/public/RUGLRTKULZB6XPESJMXXJVLTDI.jpeg&amp;w=1440&amp;w=767&amp;h=511",
+    "https://www.washingtonpost.com/dr/resources/images/generic-newsletter-signup.png",
+    "https://www.washingtonpost.com/dr/resources/images/generic-newsletter-signup.png",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/24SGXM5GJOYJZY55HEJDMBDPXY.jpg&amp;w=440",
+    "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/24SGXM5GJOYJZY55HEJDMBDPXY.jpg"
+  ],
+  "bestImage": "https://www.washingtonpost.com/wp-apps/imrs.php?src=https://cloudfront-us-east-1.images.arcpublishing.com/wapo/24SGXM5GJOYJZY55HEJDMBDPXY.jpg&amp;w=1440"
+}
