@@ -30,7 +30,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v17-wapo-filter-image-summary-merged";
+const IMPORTER_VERSION = "scored-filter-v18-wapo-advice-image-upgrade";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -230,16 +230,32 @@ const ADVICE_COLUMN_PATTERNS = [
   /^carolyn hax\b/i,
   /^ask sahaj\b/i,
   /^advice\b/i,
+  /^dear prudence\b/i,
+  /^ask amy\b/i,
+  /^ask a manager\b/i,
   /\bam i enabling\b/i,
   /\bmy boss'?s alcoholism\b/i,
   /\btable manners\b/i,
   /\betiquette\b/i,
   /\bdear (abby|prudence)\b/i,
   /\bask(ed|ing)?\s+(eric|amy|abby|sahaj)\b/i,
+  /\bcarolyn hax\b/i,
   /\brelationship advice\b/i,
   /\bworkplace advice\b/i,
   /\bmanners\b/i,
   /\blamenting the loss\b/i,
+  /\bhow do i tell\b/i,
+  /\bshould i tell\b/i,
+  /\bhow should i respond\b/i,
+  /\bwhat should i do\b/i,
+  /\bmy husband\b/i,
+  /\bmy wife\b/i,
+  /\bmy partner\b/i,
+  /\bmy boyfriend\b/i,
+  /\bmy girlfriend\b/i,
+  /\bmy in-laws?\b/i,
+  /\bmy mother\b/i,
+  /\bmy father\b/i,
 ];
 
 const WAPO_LIFESTYLE_BLOCK_PATTERNS = [
@@ -250,6 +266,9 @@ const WAPO_LIFESTYLE_BLOCK_PATTERNS = [
   /^solo-ish\b/i,
   /^voraciously\b/i,
   /^advice\b/i,
+  /^\s*carolyn hax:/i,
+  /^\s*miss manners:/i,
+  /^\s*asking eric:/i,
   /\badvice column\b/i,
   /\betiquette\b/i,
   /\bmanners\b/i,
@@ -271,6 +290,11 @@ const WAPO_LIFESTYLE_BLOCK_PATTERNS = [
   /\bargument\b/i,
   /\bfeud\b/i,
   /\bcomplain(s|ing)?\b/i,
+  /\bhow do i tell\b/i,
+  /\bshould i tell\b/i,
+  /\bwhat should i do\b/i,
+  /\bdear abby\b/i,
+  /\bdear prudence\b/i,
 ];
 
 function slugify(text: string) {
@@ -704,7 +728,7 @@ function scoreText(text: string) {
 }
 
 function isBlockedAdviceColumn(title: string, summary: string, content: string) {
-  const combined = `${title} ${summary} ${content}`.slice(0, 1500);
+  const combined = `${title} ${summary} ${content}`.slice(0, 2000);
   return ADVICE_COLUMN_PATTERNS.some((pattern) => pattern.test(combined));
 }
 
@@ -716,7 +740,7 @@ function isBlockedWashingtonPostLifestyleStory(
 ) {
   if (sourceName !== "Washington Post Lifestyle") return false;
 
-  const combined = `${title} ${summary} ${content}`.slice(0, 2000);
+  const combined = `${title} ${summary} ${content}`.slice(0, 2500);
   return WAPO_LIFESTYLE_BLOCK_PATTERNS.some((pattern) => pattern.test(combined));
 }
 
@@ -862,30 +886,39 @@ function extractImageFromFeed(item: FeedItem, sourceUrl: string): string | null 
   );
 }
 
-function extractImageCandidatesFromMeta(html: string, articleUrl: string): string[] {
+function extractMetaAttributeValues(
+  html: string,
+  propertyOrName: string,
+  articleUrl: string
+): string[] {
+  const escaped = propertyOrName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const patterns = [
-    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/gi,
-    /<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["'][^>]*>/gi,
-    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["'][^>]*>/gi,
-    /<meta[^>]+name=["']twitter:image:src["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image:src["'][^>]*>/gi,
-    /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["'][^>]*>/gi,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+itemprop=["']image["'][^>]*>/gi,
+    new RegExp(`<meta[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]+content="([^"]+)"[^>]*>`, "gi"),
+    new RegExp(`<meta[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]+content='([^']+)'[^>]*>`, "gi"),
+    new RegExp(`<meta[^>]+content="([^"]+)"[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]*>`, "gi"),
+    new RegExp(`<meta[^>]+content='([^']+)'[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]*>`, "gi"),
   ];
 
-  const candidates: string[] = [];
+  const results: string[] = [];
 
   for (const pattern of patterns) {
     for (const match of html.matchAll(pattern)) {
       const cleaned = cleanImageUrl(match[1], articleUrl);
-      if (cleaned) candidates.push(cleaned);
+      if (cleaned) results.push(cleaned);
     }
   }
 
-  return candidates;
+  return results;
+}
+
+function extractImageCandidatesFromMeta(html: string, articleUrl: string): string[] {
+  return [
+    ...extractMetaAttributeValues(html, "og:image", articleUrl),
+    ...extractMetaAttributeValues(html, "og:image:secure_url", articleUrl),
+    ...extractMetaAttributeValues(html, "twitter:image", articleUrl),
+    ...extractMetaAttributeValues(html, "twitter:image:src", articleUrl),
+    ...extractMetaAttributeValues(html, "image", articleUrl),
+  ];
 }
 
 function extractImageCandidatesFromJsonLd(html: string, articleUrl: string): string[] {
@@ -902,7 +935,7 @@ function extractImageCandidatesFromJsonLd(html: string, articleUrl: string): str
     const imageMatches = [
       ...jsonText.matchAll(/"image"\s*:\s*"([^"]+)"/gi),
       ...jsonText.matchAll(/"contentUrl"\s*:\s*"([^"]+)"/gi),
-      ...jsonText.matchAll(/"url"\s*:\s*"([^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi),
+      ...jsonText.matchAll(/"url"\s*:\s*"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi),
     ];
 
     for (const match of imageMatches) {
@@ -919,12 +952,18 @@ function extractImageCandidatesFromGenericHtml(html: string, articleUrl: string)
   const candidates: string[] = [];
 
   const patterns = [
-    /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["'][^>]*>/gi,
-    /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']image_src["'][^>]*>/gi,
-    /<img[^>]+data-lazy-src=["']([^"']+)["']/gi,
-    /<img[^>]+data-src=["']([^"']+)["']/gi,
-    /<img[^>]+src=["']([^"']+)["']/gi,
-    /<amp-img[^>]+src=["']([^"']+)["']/gi,
+    /<link[^>]+rel=["']image_src["'][^>]+href="([^"]+)"[^>]*>/gi,
+    /<link[^>]+rel=["']image_src["'][^>]+href='([^']+)'[^>]*>/gi,
+    /<link[^>]+href="([^"]+)"[^>]+rel=["']image_src["'][^>]*>/gi,
+    /<link[^>]+href='([^']+)'[^>]+rel=["']image_src["'][^>]*>/gi,
+    /<img[^>]+data-lazy-src="([^"]+)"[^>]*>/gi,
+    /<img[^>]+data-lazy-src='([^']+)'[^>]*>/gi,
+    /<img[^>]+data-src="([^"]+)"[^>]*>/gi,
+    /<img[^>]+data-src='([^']+)'[^>]*>/gi,
+    /<img[^>]+src="([^"]+)"[^>]*>/gi,
+    /<img[^>]+src='([^']+)'[^>]*>/gi,
+    /<amp-img[^>]+src="([^"]+)"[^>]*>/gi,
+    /<amp-img[^>]+src='([^']+)'[^>]*>/gi,
   ];
 
   for (const pattern of patterns) {
@@ -934,7 +973,13 @@ function extractImageCandidatesFromGenericHtml(html: string, articleUrl: string)
     }
   }
 
-  for (const match of html.matchAll(/<img[^>]+srcset=["']([^"']+)["']/gi)) {
+  for (const match of html.matchAll(/<img[^>]+srcset="([^"]+)"[^>]*>/gi)) {
+    const first = match[1]?.split(",")[0]?.trim().split(" ")[0];
+    const cleaned = cleanImageUrl(first, articleUrl);
+    if (cleaned) candidates.push(cleaned);
+  }
+
+  for (const match of html.matchAll(/<img[^>]+srcset='([^']+)'[^>]*>/gi)) {
     const first = match[1]?.split(",")[0]?.trim().split(" ")[0];
     const cleaned = cleanImageUrl(first, articleUrl);
     if (cleaned) candidates.push(cleaned);
@@ -966,10 +1011,35 @@ function extractImageCandidatesFromScripts(html: string, articleUrl: string): st
   return candidates;
 }
 
-function pickBestImageCandidate(candidates: string[]): string | null {
-  const seen = new Set<string>();
+function prioritizeWaPoCandidates(candidates: string[]): string[] {
+  const scored = candidates.map((url, index) => {
+    let score = 0;
 
-  for (const candidate of candidates) {
+    if (/wp-apps\/imrs\.php/i.test(url)) score += 10;
+    if (/arc-anglerfish|arcpublishing|cloudfront-us-east-1\.images\.arcpublishing\.com/i.test(url)) score += 8;
+    if (/[?&]w=1440\b/i.test(url)) score += 6;
+    if (/[?&]w=1200\b/i.test(url)) score += 5;
+    if (/[?&]w=1024\b/i.test(url)) score += 4;
+    if (/[?&]w=440\b/i.test(url)) score -= 2;
+    if (/author-service-images|arc-authors/i.test(url)) score -= 5;
+    if (/generic-newsletter-signup/i.test(url)) score -= 10;
+    if (/\.png(\?|$)/i.test(url) && /author-service-images|arc-authors/i.test(url)) score -= 3;
+
+    return { url, score, index };
+  });
+
+  scored.sort((a, b) => b.score - a.score || a.index - b.index);
+  return scored.map((item) => item.url);
+}
+
+function pickBestImageCandidate(candidates: string[], articleUrl?: string): string | null {
+  const seen = new Set<string>();
+  const ordered =
+    articleUrl && /washingtonpost\.com/i.test(articleUrl)
+      ? prioritizeWaPoCandidates(candidates)
+      : candidates;
+
+  for (const candidate of ordered) {
     if (!candidate) continue;
     if (seen.has(candidate)) continue;
     seen.add(candidate);
@@ -995,7 +1065,7 @@ function extractBestImageFromHtml(html: string, articleUrl: string): string | nu
   const scripts = extractImageCandidatesFromScripts(html, articleUrl);
 
   const all = [...meta, ...jsonLd, ...generic, ...scripts];
-  return pickBestImageCandidate(all);
+  return pickBestImageCandidate(all, articleUrl);
 }
 
 async function extractImageFromArticlePage(articleUrl: string): Promise<string | null> {
