@@ -1,5 +1,7 @@
 import Parser from "rss-parser";
-import { supabase } from "@/lib/supabase";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+const supabase = createAdminClient();
 
 type FeedItem = {
   title?: string;

@@ -1,36 +1,6 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-
-async function createClient() {
-  const cookieStore = await cookies();
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-  if (!url || !publishableKey) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY."
-    );
-  }
-
-  return createServerClient(url, publishableKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        } catch {
-          // Ignore in route handlers if cookies can't be set here
-        }
-      },
-    },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(
   _req: Request,
@@ -38,18 +8,19 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
+    // Auth check — uses cookie-aware client
+    const authClient = await createClient();
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser();
+    } = await authClient.auth.getUser();
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await authClient
       .from("profiles")
       .select("role")
       .eq("id", user.id)
@@ -59,6 +30,8 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // DB writes — uses service role client
+    const supabase = createAdminClient();
     const now = new Date().toISOString();
 
     const { error: updateError } = await supabase

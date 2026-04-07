@@ -1,42 +1,12 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-
-async function createClient() {
-  const cookieStore = await cookies();
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-  if (!url || !publishableKey) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY."
-    );
-  }
-
-  return createServerClient(url, publishableKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        } catch {
-          // Ignore cookie set issues in route handlers
-        }
-      },
-    },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 function slugify(text: string) {
   return text
     .toLowerCase()
     .trim()
-    .replace(/['’]/g, "")
+    .replace(/['']/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
@@ -71,9 +41,7 @@ function absoluteUrl(url: string, baseUrl: string) {
 
 function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
   if (!url) return null;
-
   const raw = decodeHtmlEntities(url.trim());
-
   if (
     !raw ||
     raw.startsWith("data:") ||
@@ -82,14 +50,11 @@ function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
   ) {
     return null;
   }
-
   const cleaned = absoluteUrl(raw, baseUrl);
-
   if (!/^https?:\/\//i.test(cleaned)) return null;
   if (/\.svg(\?|$)/i.test(cleaned)) return null;
   if (/sprite|icon|logo|avatar|1x1|pixel/i.test(cleaned)) return null;
   if (/generic-newsletter-signup/i.test(cleaned)) return null;
-
   return cleaned;
 }
 
@@ -124,12 +89,7 @@ function splitIntoParagraphs(text: string = "") {
 
 function removeTrailingSourceBoilerplate(text: string) {
   if (!text) return "";
-
-  let cleaned = text
-    .replace(/\s+/g, " ")
-    .replace(/\s+\./g, ".")
-    .trim();
-
+  let cleaned = text.replace(/\s+/g, " ").replace(/\s+\./g, ".").trim();
   const trailingPatterns = [
     /\bThe post .*? appeared first on .*?\.?$/gi,
     /\bAppeared first on .*?\.?$/gi,
@@ -143,28 +103,20 @@ function removeTrailingSourceBoilerplate(text: string) {
     /\bCourtesy of .*?$/gi,
     /\bvia .*?$/gi,
   ];
-
   let changed = true;
-
   while (changed) {
     changed = false;
     const before = cleaned;
-
     for (const pattern of trailingPatterns) {
       cleaned = cleaned.replace(pattern, "").trim();
     }
-
     cleaned = cleaned
       .replace(/\b(of|from|on|via|at|by|for|with)\s*$/gi, "")
       .replace(/[,:;–—-]\s*$/g, "")
       .replace(/\s+\./g, ".")
       .trim();
-
-    if (cleaned !== before) {
-      changed = true;
-    }
+    if (cleaned !== before) changed = true;
   }
-
   return cleaned;
 }
 
@@ -180,16 +132,13 @@ function cleanStoryText(text: string) {
     .replace(/\s{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-
   return removeTrailingSourceBoilerplate(cleaned);
 }
 
 function isJunkParagraph(paragraph: string = "") {
   const p = paragraph.trim().toLowerCase();
-
   if (!p) return true;
   if (p.length < 40) return true;
-
   const junkPatterns = [
     /^(photo|image|credit|caption)\b/,
     /^(read more|see also|related:?)\b/,
@@ -208,42 +157,29 @@ function isJunkParagraph(paragraph: string = "") {
     /^more from\b/,
     /^source:?\b/,
   ];
-
-  if (junkPatterns.some((pattern) => pattern.test(p))) {
-    return true;
-  }
-
+  if (junkPatterns.some((pattern) => pattern.test(p))) return true;
   return false;
 }
 
 function cleanArticleContent(rawContent: string = "") {
   if (!rawContent) return "";
-
   const cleaned = cleanStoryText(rawContent);
   const paragraphs = splitIntoParagraphs(cleaned)
     .map(removeTrailingSourceBoilerplate)
     .filter((p) => !isJunkParagraph(p));
-
   return paragraphs.join("\n\n").trim();
 }
 
 function truncateNicely(text: string, maxLength: number) {
   const cleaned = removeTrailingSourceBoilerplate(normalizeWhitespace(text));
-
-  if (cleaned.length <= maxLength) {
-    return cleaned;
-  }
-
+  if (cleaned.length <= maxLength) return cleaned;
   const sliced = cleaned.slice(0, maxLength);
-
   const lastSentenceEnd = Math.max(
     sliced.lastIndexOf(". "),
     sliced.lastIndexOf("! "),
     sliced.lastIndexOf("? ")
   );
-
   let truncated = "";
-
   if (lastSentenceEnd > 120) {
     truncated = sliced.slice(0, lastSentenceEnd + 1).trim();
   } else {
@@ -254,12 +190,10 @@ function truncateNicely(text: string, maxLength: number) {
       truncated = sliced.trim();
     }
   }
-
   truncated = removeTrailingSourceBoilerplate(truncated)
     .replace(/\b(of|from|on|via|at|by|for|with)\s*$/gi, "")
     .replace(/[,:;–—-]\s*$/g, "")
     .trim();
-
   return `${truncated}...`;
 }
 
@@ -267,38 +201,22 @@ function buildSummaryFromContent(cleanedContent: string, fallbackDescription = "
   const paragraphs = splitIntoParagraphs(cleanedContent)
     .map(removeTrailingSourceBoilerplate)
     .filter((p) => !isJunkParagraph(p));
-
   if (paragraphs.length === 0) {
     return fallbackDescription
       ? truncateNicely(cleanStoryText(fallbackDescription), 900)
       : "";
   }
-
   const selected: string[] = [];
-
   for (const paragraph of paragraphs) {
     if (selected.length >= 3) break;
     if (paragraph.length < 80) continue;
-
     selected.push(paragraph);
-
     const currentLength = selected.join("\n\n").length;
-
-    if (selected.length >= 2 && currentLength >= 600) {
-      break;
-    }
+    if (selected.length >= 2 && currentLength >= 600) break;
   }
-
-  if (selected.length === 0) {
-    selected.push(paragraphs[0]);
-  }
-
+  if (selected.length === 0) selected.push(paragraphs[0]);
   let summary = selected.join("\n\n").trim();
-
-  if (summary.length > 900) {
-    summary = truncateNicely(summary, 900);
-  }
-
+  if (summary.length > 900) summary = truncateNicely(summary, 900);
   return summary;
 }
 
@@ -313,7 +231,6 @@ function getDomainFromUrl(value: string) {
 
 function inferPublicationNameFromUrl(url: string) {
   const domain = getDomainFromUrl(url);
-
   const known: Record<string, string> = {
     "espn.com": "ESPN",
     "washingtonpost.com": "Washington Post",
@@ -330,9 +247,7 @@ function inferPublicationNameFromUrl(url: string) {
     "apnews.com": "AP News",
     "reuters.com": "Reuters",
   };
-
   if (known[domain]) return known[domain];
-
   const base = domain.split(".")[0] || domain;
   return base
     .split(/[-_]/g)
@@ -346,7 +261,6 @@ function guessTitleFromUrl(url: string) {
     const pathname = new URL(url).pathname;
     const last = pathname.split("/").filter(Boolean).pop() || "";
     if (!last) return "Submitted article";
-
     return last
       .replace(/[-_]+/g, " ")
       .replace(/\.[a-z0-9]+$/i, "")
@@ -360,7 +274,6 @@ function normalizeExtractedTitle(title: string) {
   const cleaned = decodeHtmlEntities(title)
     .replace(/\s*[-|–—]\s*(ESPN|Washington Post|Good News Network|Positive News|Good Good Good|Fox News|CNN|BBC|Reuters|AP News|NPR|New York Times|The Guardian)\s*$/i, "")
     .trim();
-
   return cleaned || title.trim();
 }
 
@@ -371,119 +284,45 @@ function detectCategory(
   content: string | null,
   sourceName: string | null
 ) {
-  const haystack = [
-    title || "",
-    summary || "",
-    content || "",
-    sourceName || "",
-  ]
+  const haystack = [title || "", summary || "", content || "", sourceName || ""]
     .join(" ")
     .toLowerCase();
-
-  if (
-    haystack.includes("dog") ||
-    haystack.includes("cat") ||
-    haystack.includes("animal") ||
-    haystack.includes("wildlife") ||
-    haystack.includes("bird") ||
-    haystack.includes("pet") ||
-    haystack.includes("rescue")
-  ) {
-    return "animals";
-  }
-
-  if (
-    haystack.includes("health") ||
-    haystack.includes("hospital") ||
-    haystack.includes("doctor") ||
-    haystack.includes("nurse") ||
-    haystack.includes("medical") ||
-    haystack.includes("therapy") ||
-    haystack.includes("mental health") ||
-    haystack.includes("wellness")
-  ) {
-    return "health";
-  }
-
-  if (
-    haystack.includes("kindness") ||
-    haystack.includes("generosity") ||
-    haystack.includes("donation") ||
-    haystack.includes("volunteer") ||
-    haystack.includes("helped") ||
-    haystack.includes("helping") ||
-    haystack.includes("gift") ||
-    haystack.includes("support")
-  ) {
-    return "kindness";
-  }
-
-  if (
-    haystack.includes("community") ||
-    haystack.includes("neighborhood") ||
-    haystack.includes("school") ||
-    haystack.includes("town") ||
-    haystack.includes("city") ||
-    haystack.includes("library") ||
-    haystack.includes("students") ||
-    haystack.includes("families")
-  ) {
-    return "community";
-  }
-
-  if (submissionType === "original_story") {
-    return "community";
-  }
-
+  if (haystack.includes("dog") || haystack.includes("cat") || haystack.includes("animal") || haystack.includes("wildlife") || haystack.includes("bird") || haystack.includes("pet") || haystack.includes("rescue")) return "animals";
+  if (haystack.includes("health") || haystack.includes("hospital") || haystack.includes("doctor") || haystack.includes("nurse") || haystack.includes("medical") || haystack.includes("therapy") || haystack.includes("mental health") || haystack.includes("wellness")) return "health";
+  if (haystack.includes("kindness") || haystack.includes("generosity") || haystack.includes("donation") || haystack.includes("volunteer") || haystack.includes("helped") || haystack.includes("helping") || haystack.includes("gift") || haystack.includes("support")) return "kindness";
+  if (haystack.includes("community") || haystack.includes("neighborhood") || haystack.includes("school") || haystack.includes("town") || haystack.includes("city") || haystack.includes("library") || haystack.includes("students") || haystack.includes("families")) return "community";
+  if (submissionType === "original_story") return "community";
   return "hope";
 }
 
 async function generateUniqueSlug(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   baseSlug: string,
   submissionId: string
 ) {
   let candidate = baseSlug || `reader-submission-${submissionId.slice(0, 8)}`;
-
   const { data: existing, error } = await supabase
     .from("stories")
     .select("id")
     .eq("slug", candidate)
     .limit(1);
-
-  if (error) {
-    throw new Error(`Slug lookup failed: ${error.message}`);
-  }
-
-  if (!existing || existing.length === 0) {
-    return candidate;
-  }
-
+  if (error) throw new Error(`Slug lookup failed: ${error.message}`);
+  if (!existing || existing.length === 0) return candidate;
   candidate = `${candidate}-${submissionId.slice(0, 8)}`;
-
   const { data: secondCheck, error: secondError } = await supabase
     .from("stories")
     .select("id")
     .eq("slug", candidate)
     .limit(1);
-
-  if (secondError) {
-    throw new Error(`Secondary slug lookup failed: ${secondError.message}`);
-  }
-
-  if (!secondCheck || secondCheck.length === 0) {
-    return candidate;
-  }
-
+  if (secondError) throw new Error(`Secondary slug lookup failed: ${secondError.message}`);
+  if (!secondCheck || secondCheck.length === 0) return candidate;
   return `${candidate}-${Date.now().toString().slice(-6)}`;
 }
 
 function extractMetaContent(html: string, patterns: RegExp[]) {
   for (const pattern of patterns) {
     const match = html.match(pattern)?.[1] ?? html.match(pattern)?.[2];
-    if (match) {
-      return decodeHtmlEntities(match.trim());
-    }
+    if (match) return decodeHtmlEntities(match.trim());
   }
   return "";
 }
@@ -511,98 +350,67 @@ function extractImageCandidatesFromMeta(html: string, articleUrl: string): strin
     /<meta[^>]+content="([^"]+)"[^>]+itemprop=["']image["'][^>]*>/gi,
     /<meta[^>]+content='([^']+)'[^>]+itemprop=["']image["'][^>]*>/gi,
   ];
-
   const candidates: string[] = [];
-
   for (const pattern of patterns) {
     for (const match of html.matchAll(pattern)) {
       const cleaned = cleanImageUrl((match as RegExpMatchArray)[1], articleUrl);
       if (cleaned) candidates.push(cleaned);
     }
   }
-
   return candidates;
 }
 
 function extractImageCandidatesFromJsonLd(html: string, articleUrl: string): string[] {
   const candidates: string[] = [];
-  const scriptMatches =
-    html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
-
+  const scriptMatches = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi) || [];
   for (const scriptTag of scriptMatches) {
-    const jsonText = scriptTag
-      .replace(/^<script[^>]*>/i, "")
-      .replace(/<\/script>$/i, "")
-      .trim();
-
+    const jsonText = scriptTag.replace(/^<script[^>]*>/i, "").replace(/<\/script>$/i, "").trim();
     const imageMatches = [
       ...jsonText.matchAll(/"image"\s*:\s*"([^"]+)"/gi),
       ...jsonText.matchAll(/"contentUrl"\s*:\s*"([^"]+)"/gi),
       ...jsonText.matchAll(/"url"\s*:\s*"([^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi),
     ];
-
     for (const match of imageMatches) {
       const maybe = match[1]?.replace(/\\\//g, "/");
       const cleaned = cleanImageUrl(maybe, articleUrl);
       if (cleaned) candidates.push(cleaned);
     }
   }
-
   return candidates;
 }
 
 function extractImageCandidatesFromGenericHtml(html: string, articleUrl: string): string[] {
   const candidates: string[] = [];
-
   const patterns = [
     /<link[^>]+rel=["']image_src["'][^>]+href="([^"]+)"[^>]*>/gi,
     /<link[^>]+rel=["']image_src["'][^>]+href='([^']+)'[^>]*>/gi,
-    /<link[^>]+href="([^"]+)"[^>]+rel=["']image_src["'][^>]*>/gi,
-    /<link[^>]+href='([^']+)'[^>]+rel=["']image_src["'][^>]*>/gi,
     /<img[^>]+data-lazy-src="([^"]+)"[^>]*>/gi,
-    /<img[^>]+data-lazy-src='([^']+)'[^>]*>/gi,
     /<img[^>]+data-src="([^"]+)"[^>]*>/gi,
-    /<img[^>]+data-src='([^']+)'[^>]*>/gi,
     /<img[^>]+src="([^"]+)"[^>]*>/gi,
     /<img[^>]+src='([^']+)'[^>]*>/gi,
     /<amp-img[^>]+src="([^"]+)"[^>]*>/gi,
-    /<amp-img[^>]+src='([^']+)'[^>]*>/gi,
   ];
-
   for (const pattern of patterns) {
     for (const match of html.matchAll(pattern)) {
       const cleaned = cleanImageUrl((match as RegExpMatchArray)[1], articleUrl);
       if (cleaned) candidates.push(cleaned);
     }
   }
-
   for (const match of html.matchAll(/<img[^>]+srcset="([^"]+)"[^>]*>/gi)) {
     const first = match[1]?.split(",")[0]?.trim().split(" ")[0];
     const cleaned = cleanImageUrl(first, articleUrl);
     if (cleaned) candidates.push(cleaned);
   }
-
-  for (const match of html.matchAll(/<img[^>]+srcset='([^']+)'[^>]*>/gi)) {
-    const first = match[1]?.split(",")[0]?.trim().split(" ")[0];
-    const cleaned = cleanImageUrl(first, articleUrl);
-    if (cleaned) candidates.push(cleaned);
-  }
-
   return candidates;
 }
 
 function extractImageCandidatesFromScripts(html: string, articleUrl: string): string[] {
   const candidates: string[] = [];
-
   const patterns = [
     /https?:\/\/[^"'\\\s>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^"'\\\s>]*)?/gi,
     /"image"\s*:\s*"([^"]+)"/gi,
-    /"hero-image"\s*:\s*"([^"]+)"/gi,
-    /"promo_image"\s*:\s*"([^"]+)"/gi,
     /"url"\s*:\s*"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi,
-    /"originalUrl"\s*:\s*"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi,
   ];
-
   for (const pattern of patterns) {
     for (const match of html.matchAll(pattern)) {
       const raw = (match[1] || match[0] || "").replace(/\\\//g, "/");
@@ -610,39 +418,27 @@ function extractImageCandidatesFromScripts(html: string, articleUrl: string): st
       if (cleaned) candidates.push(cleaned);
     }
   }
-
   return candidates;
 }
 
 function pickBestImageCandidate(candidates: string[]): string | null {
   const seen = new Set<string>();
-
   for (const candidate of candidates) {
-    if (!candidate) continue;
-    if (seen.has(candidate)) continue;
+    if (!candidate || seen.has(candidate)) continue;
     seen.add(candidate);
-
-    if (
-      /sprite|icon|logo|avatar|1x1|pixel/i.test(candidate) ||
-      /\.(svg)(\?|$)/i.test(candidate) ||
-      /generic-newsletter-signup/i.test(candidate)
-    ) {
-      continue;
-    }
-
+    if (/sprite|icon|logo|avatar|1x1|pixel/i.test(candidate) || /\.(svg)(\?|$)/i.test(candidate) || /generic-newsletter-signup/i.test(candidate)) continue;
     return candidate;
   }
-
   return null;
 }
 
 function extractBestImageFromHtml(html: string, articleUrl: string): string | null {
-  const meta = extractImageCandidatesFromMeta(html, articleUrl);
-  const jsonLd = extractImageCandidatesFromJsonLd(html, articleUrl);
-  const generic = extractImageCandidatesFromGenericHtml(html, articleUrl);
-  const scripts = extractImageCandidatesFromScripts(html, articleUrl);
-
-  const all = [...meta, ...jsonLd, ...generic, ...scripts];
+  const all = [
+    ...extractImageCandidatesFromMeta(html, articleUrl),
+    ...extractImageCandidatesFromJsonLd(html, articleUrl),
+    ...extractImageCandidatesFromGenericHtml(html, articleUrl),
+    ...extractImageCandidatesFromScripts(html, articleUrl),
+  ];
   return pickBestImageCandidate(all);
 }
 
@@ -652,32 +448,18 @@ function extractArticleContentFromHtml(html: string) {
     html.match(/<main[\s\S]*?<\/main>/i)?.[0] ||
     html.match(/<body[\s\S]*?<\/body>/i)?.[0] ||
     html;
-
   return cleanArticleContent(articleMatch);
 }
 
 async function extractArticleDataFromUrl(url: string | null) {
-  if (!url) {
-    return {
-      title: "",
-      sourceName: "",
-      description: "",
-      imageUrl: null as string | null,
-      content: "",
-      summary: "",
-    };
-  }
-
+  if (!url) return { title: "", sourceName: "", description: "", imageUrl: null as string | null, content: "", summary: "" };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
-
   try {
     const response = await fetch(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
         "Cache-Control": "no-cache",
         Pragma: "no-cache",
@@ -688,35 +470,20 @@ async function extractArticleDataFromUrl(url: string | null) {
       cache: "no-store",
       signal: controller.signal,
     });
-
-    if (!response.ok) {
-      return {
-        title: guessTitleFromUrl(url),
-        sourceName: inferPublicationNameFromUrl(url),
-        description: "",
-        imageUrl: null,
-        content: "",
-        summary: "",
-      };
-    }
-
+    if (!response.ok) return { title: guessTitleFromUrl(url), sourceName: inferPublicationNameFromUrl(url), description: "", imageUrl: null, content: "", summary: "" };
     const html = await response.text();
-
-    const rawTitle =
-      extractMetaContent(html, [
-        /<meta[^>]+property=["']og:title["'][^>]+content="([^"]+)"[^>]*>/i,
-        /<meta[^>]+property=["']og:title["'][^>]+content='([^']+)'[^>]*>/i,
-        /<meta[^>]+content="([^"]+)"[^>]+property=["']og:title["'][^>]*>/i,
-        /<meta[^>]+content='([^']+)'[^>]+property=["']og:title["'][^>]*>/i,
-        /<meta[^>]+name=["']twitter:title["'][^>]+content="([^"]+)"[^>]*>/i,
-        /<meta[^>]+name=["']twitter:title["'][^>]+content='([^']+)'[^>]*>/i,
-        /<meta[^>]+content="([^"]+)"[^>]+name=["']twitter:title["'][^>]*>/i,
-        /<meta[^>]+content='([^']+)'[^>]+name=["']twitter:title["'][^>]*>/i,
-        /<title[^>]*>([\s\S]*?)<\/title>/i,
-      ]) || guessTitleFromUrl(url);
-
+    const rawTitle = extractMetaContent(html, [
+      /<meta[^>]+property=["']og:title["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+property=["']og:title["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+property=["']og:title["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+property=["']og:title["'][^>]*>/i,
+      /<meta[^>]+name=["']twitter:title["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+name=["']twitter:title["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+name=["']twitter:title["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+name=["']twitter:title["'][^>]*>/i,
+      /<title[^>]*>([\s\S]*?)<\/title>/i,
+    ]) || guessTitleFromUrl(url);
     const title = normalizeExtractedTitle(rawTitle);
-
     const description = extractMetaContent(html, [
       /<meta[^>]+property=["']og:description["'][^>]+content="([^"]+)"[^>]*>/i,
       /<meta[^>]+property=["']og:description["'][^>]+content='([^']+)'[^>]*>/i,
@@ -726,46 +493,24 @@ async function extractArticleDataFromUrl(url: string | null) {
       /<meta[^>]+name=["']description["'][^>]+content='([^']+)'[^>]*>/i,
       /<meta[^>]+content="([^"]+)"[^>]+name=["']description["'][^>]*>/i,
       /<meta[^>]+content='([^']+)'[^>]+name=["']description["'][^>]*>/i,
-      /<meta[^>]+name=["']twitter:description["'][^>]+content="([^"]+)"[^>]*>/i,
-      /<meta[^>]+name=["']twitter:description["'][^>]+content='([^']+)'[^>]*>/i,
-      /<meta[^>]+content="([^"]+)"[^>]+name=["']twitter:description["'][^>]*>/i,
-      /<meta[^>]+content='([^']+)'[^>]+name=["']twitter:description["'][^>]*>/i,
     ]);
-
-    const sourceName =
-      extractMetaContent(html, [
-        /<meta[^>]+property=["']og:site_name["'][^>]+content="([^"]+)"[^>]*>/i,
-        /<meta[^>]+property=["']og:site_name["'][^>]+content='([^']+)'[^>]*>/i,
-        /<meta[^>]+content="([^"]+)"[^>]+property=["']og:site_name["'][^>]*>/i,
-        /<meta[^>]+content='([^']+)'[^>]+property=["']og:site_name["'][^>]*>/i,
-        /<meta[^>]+name=["']application-name["'][^>]+content="([^"]+)"[^>]*>/i,
-        /<meta[^>]+name=["']application-name["'][^>]+content='([^']+)'[^>]*>/i,
-        /<meta[^>]+content="([^"]+)"[^>]+name=["']application-name["'][^>]*>/i,
-        /<meta[^>]+content='([^']+)'[^>]+name=["']application-name["'][^>]*>/i,
-      ]) || inferPublicationNameFromUrl(url);
-
+    const sourceName = extractMetaContent(html, [
+      /<meta[^>]+property=["']og:site_name["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+property=["']og:site_name["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+property=["']og:site_name["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+property=["']og:site_name["'][^>]*>/i,
+      /<meta[^>]+name=["']application-name["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+name=["']application-name["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+name=["']application-name["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+name=["']application-name["'][^>]*>/i,
+    ]) || inferPublicationNameFromUrl(url);
     const imageUrl = extractBestImageFromHtml(html, url);
     const content = extractArticleContentFromHtml(html);
     const summary = buildSummaryFromContent(content, description);
-
-    return {
-      title,
-      sourceName,
-      description,
-      imageUrl,
-      content,
-      summary,
-    };
+    return { title, sourceName, description, imageUrl, content, summary };
   } catch (error) {
     console.error("Article extraction failed during publish:", error);
-    return {
-      title: guessTitleFromUrl(url),
-      sourceName: inferPublicationNameFromUrl(url),
-      description: "",
-      imageUrl: null,
-      content: "",
-      summary: "",
-    };
+    return { title: guessTitleFromUrl(url), sourceName: inferPublicationNameFromUrl(url), description: "", imageUrl: null, content: "", summary: "" };
   } finally {
     clearTimeout(timeout);
   }
@@ -777,18 +522,19 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
+    // Auth check — uses cookie-aware client
+    const authClient = await createClient();
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser();
+    } = await authClient.auth.getUser();
 
     if (userError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await authClient
       .from("profiles")
       .select("role")
       .eq("id", user.id)
@@ -797,6 +543,9 @@ export async function POST(
     if (profileError || !profile || profile.role !== "admin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // All DB operations — uses service role client
+    const supabase = createAdminClient();
 
     const { data: submission, error: submissionError } = await supabase
       .from("reader_submissions")
@@ -810,18 +559,11 @@ export async function POST(
     }
 
     if (submission.status === "rejected") {
-      return NextResponse.json(
-        { error: "Rejected submissions cannot be published." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Rejected submissions cannot be published." }, { status: 400 });
     }
 
     if (submission.status === "published" && submission.linked_story_id) {
-      return NextResponse.json({
-        success: true,
-        message: "Submission already published",
-        story_id: submission.linked_story_id,
-      });
+      return NextResponse.json({ success: true, message: "Submission already published", story_id: submission.linked_story_id });
     }
 
     const { data: existingBySubmission, error: existingBySubmissionError } = await supabase
@@ -832,15 +574,11 @@ export async function POST(
 
     if (existingBySubmissionError) {
       console.error("Existing story by submission lookup error:", existingBySubmissionError);
-      return NextResponse.json(
-        { error: existingBySubmissionError.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: existingBySubmissionError.message }, { status: 500 });
     }
 
     if (existingBySubmission && existingBySubmission.length > 0) {
       const existingStory = existingBySubmission[0];
-
       const { error: relinkError } = await supabase
         .from("reader_submissions")
         .update({
@@ -851,17 +589,8 @@ export async function POST(
           reviewed_at: new Date().toISOString(),
         })
         .eq("id", id);
-
-      if (relinkError) {
-        return NextResponse.json({ error: relinkError.message }, { status: 500 });
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: "Submission was already linked to an existing story.",
-        story_id: existingStory.id,
-        slug: existingStory.slug,
-      });
+      if (relinkError) return NextResponse.json({ error: relinkError.message }, { status: 500 });
+      return NextResponse.json({ success: true, message: "Submission was already linked to an existing story.", story_id: existingStory.id, slug: existingStory.slug });
     }
 
     if (submission.source_url) {
@@ -873,15 +602,11 @@ export async function POST(
 
       if (existingBySourceUrlError) {
         console.error("Existing story by source_url lookup error:", existingBySourceUrlError);
-        return NextResponse.json(
-          { error: existingBySourceUrlError.message },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: existingBySourceUrlError.message }, { status: 500 });
       }
 
       if (existingBySourceUrl && existingBySourceUrl.length > 0) {
         const existingStory = existingBySourceUrl[0];
-
         const { error: updateMatchedError } = await supabase
           .from("reader_submissions")
           .update({
@@ -892,38 +617,21 @@ export async function POST(
             reviewed_at: new Date().toISOString(),
           })
           .eq("id", id);
-
-        if (updateMatchedError) {
-          return NextResponse.json({ error: updateMatchedError.message }, { status: 500 });
-        }
-
+        if (updateMatchedError) return NextResponse.json({ error: updateMatchedError.message }, { status: 500 });
         await supabase.from("reader_submission_events").insert({
           submission_id: id,
           event_type: "linked_to_existing_story",
           actor_user_id: user.id,
           notes: `Matched existing story by source_url (${existingStory.slug || existingStory.id})`,
         });
-
-        return NextResponse.json({
-          success: true,
-          message: "Matched to an existing story by source URL.",
-          story_id: existingStory.id,
-          slug: existingStory.slug,
-        });
+        return NextResponse.json({ success: true, message: "Matched to an existing story by source URL.", story_id: existingStory.id, slug: existingStory.slug });
       }
     }
 
     const extractedArticleData =
       submission.submission_type === "article_link" && submission.source_url
         ? await extractArticleDataFromUrl(submission.source_url)
-        : {
-            title: "",
-            sourceName: "",
-            description: "",
-            imageUrl: null as string | null,
-            content: "",
-            summary: "",
-          };
+        : { title: "", sourceName: "", description: "", imageUrl: null as string | null, content: "", summary: "" };
 
     const finalTitle =
       submission.submission_type === "article_link"
@@ -932,9 +640,7 @@ export async function POST(
 
     const finalSourceName =
       submission.submission_type === "article_link"
-        ? extractedArticleData.sourceName ||
-          submission.source_name ||
-          (submission.source_url ? inferPublicationNameFromUrl(submission.source_url) : null)
+        ? extractedArticleData.sourceName || submission.source_name || (submission.source_url ? inferPublicationNameFromUrl(submission.source_url) : null)
         : submission.source_name || null;
 
     const baseSlug = slugify(finalTitle || "reader-submission");
@@ -950,20 +656,11 @@ export async function POST(
         ? extractedArticleData.content || ""
         : submission.content || submission.summary || "";
 
-    const finalImageUrl =
-      submission.image_url ||
-      extractedArticleData.imageUrl ||
-      null;
+    const finalImageUrl = submission.image_url || extractedArticleData.imageUrl || null;
 
     const categorySlug =
       submission.category_slug ||
-      detectCategory(
-        submission.submission_type,
-        finalTitle,
-        finalSummary,
-        finalContent,
-        finalSourceName
-      );
+      detectCategory(submission.submission_type, finalTitle, finalSummary, finalContent, finalSourceName);
 
     const publishDate = new Date().toISOString();
 
@@ -990,10 +687,7 @@ export async function POST(
 
     if (insertError || !story) {
       console.error("Publish story insert error:", insertError);
-      return NextResponse.json(
-        { error: insertError?.message || "Failed to create story row." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: insertError?.message || "Failed to create story row." }, { status: 500 });
     }
 
     const { error: updateError } = await supabase
@@ -1009,10 +703,7 @@ export async function POST(
 
     if (updateError) {
       console.error("Publish submission update error:", updateError);
-      return NextResponse.json(
-        { error: updateError.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
     const categorySource = submission.category_slug
@@ -1033,24 +724,13 @@ export async function POST(
         notes: eventNotes,
       });
 
-    if (eventError) {
-      console.error("Publish event error:", eventError);
-    }
+    if (eventError) console.error("Publish event error:", eventError);
 
-    return NextResponse.json({
-      success: true,
-      story_id: story.id,
-      slug: story.slug,
-      category_slug: story.category_slug,
-    });
+    return NextResponse.json({ success: true, story_id: story.id, slug: story.slug, category_slug: story.category_slug });
   } catch (error) {
     console.error("Publish route error:", error);
-
-    const message =
-      error instanceof Error ? error.message : "Unexpected server error.";
-
     return NextResponse.json(
-      { error: message },
+      { error: error instanceof Error ? error.message : "Unexpected server error." },
       { status: 500 }
     );
   }
