@@ -1107,6 +1107,23 @@ export async function GET() {
   const logs: string[] = [];
 
   try {
+    logs.push("=== IMPORT START ===");
+
+    // 🔍 DEBUG: Check what role Supabase thinks we are
+    try {
+      const { data: roleCheck, error: roleError } = await supabase.rpc("debug_jwt_role");
+
+      logs.push(`DEBUG ROLE: ${JSON.stringify(roleCheck)}`);
+
+      if (roleError) {
+        logs.push(`DEBUG ROLE ERROR: ${roleError.message}`);
+      }
+    } catch (err) {
+      logs.push(`DEBUG ROLE FAILED: ${String(err)}`);
+    }
+
+    logs.push("=== CONTINUING IMPORTER ===");
+
     logs.push(`IMPORTER_VERSION: ${IMPORTER_VERSION}`);
     logs.push(`Configured sources: ${FEED_SOURCES.map((s) => s.name).join(", ")}`);
 
