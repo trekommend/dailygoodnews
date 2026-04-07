@@ -2,6 +2,32 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 
+// ============================================
+// RATE LIMITER
+// 3 submissions per IP per 10 minutes
+// In-memory: resets on cold start, fine for Vercel serverless
+// ============================================
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return true;
+  }
+
+  entry.count += 1;
+  return false;
+}
+
 const blockedTerms = [
   "fuck",
   "shit",
@@ -201,7 +227,7 @@ function slugify(text: string) {
   return text
     .toLowerCase()
     .trim()
-    .replace(/['’]/g, "")
+    .replace(/['']/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
@@ -589,10 +615,7 @@ async function checkGoogleSafeBrowsing(urlToCheck: string) {
         enabled: true,
         matched: false,
         matches: [] as SafeBrowsingMatch[],
-        error: `Safe Browsing lookup failed (${response.status}): ${text.slice(
-          0,
-          200
-        )}`,
+        error: `Safe Browsing lookup failed (${response.status}): ${text.slice(0, 200)}`,
       };
     }
 
@@ -616,6 +639,22 @@ async function checkGoogleSafeBrowsing(urlToCheck: string) {
 }
 
 export async function POST(req: Request) {
+  // ============================================
+  // RATE LIMITING — must be first check
+  // ============================================
+  const forwarded = req.headers.get("x-forwarded-for");
+  const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";
+
+  if (isRateLimited(ip)) {
+    return NextResponse.json(
+      {
+        error:
+          "Too many submissions. Please wait a few minutes before trying again.",
+      },
+      { status: 429 }
+    );
+  }
+
   try {
     if (
       !process.env.NEXT_PUBLIC_SUPABASE_URL ||
