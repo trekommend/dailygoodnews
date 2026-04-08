@@ -1,19 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request,
   });
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-  if (!url || !publishableKey) {
+  // If env vars are missing, just continue
+  if (!supabaseUrl || !publishableKey) {
     return response;
   }
 
-  const supabase = createServerClient(url, publishableKey, {
+  const supabase = createServerClient(supabaseUrl, publishableKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -34,6 +35,7 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  // Refresh auth session (safe no-op if not logged in)
   await supabase.auth.getClaims();
 
   return response;

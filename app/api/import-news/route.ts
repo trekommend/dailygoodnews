@@ -32,7 +32,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v18-wapo-advice-image-upgrade";
+const IMPORTER_VERSION = "scored-filter-v19-wapo-hax-page-first";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -230,6 +230,7 @@ const ADVICE_COLUMN_PATTERNS = [
   /^miss manners\b/i,
   /^dear abby\b/i,
   /^carolyn hax\b/i,
+  /^hax\b/i,
   /^ask sahaj\b/i,
   /^advice\b/i,
   /^dear prudence\b/i,
@@ -242,6 +243,7 @@ const ADVICE_COLUMN_PATTERNS = [
   /\bdear (abby|prudence)\b/i,
   /\bask(ed|ing)?\s+(eric|amy|abby|sahaj)\b/i,
   /\bcarolyn hax\b/i,
+  /\bhax\b/i,
   /\brelationship advice\b/i,
   /\bworkplace advice\b/i,
   /\bmanners\b/i,
@@ -264,13 +266,28 @@ const WAPO_LIFESTYLE_BLOCK_PATTERNS = [
   /^asking eric\b/i,
   /^miss manners\b/i,
   /^carolyn hax\b/i,
+  /^hax\b/i,
   /^date lab\b/i,
   /^solo-ish\b/i,
   /^voraciously\b/i,
   /^advice\b/i,
+  /^ask sahaj\b/i,
+  /^dear abby\b/i,
+  /^dear prudence\b/i,
+  /^ask amy\b/i,
+  /^ask a manager\b/i,
   /^\s*carolyn hax:/i,
+  /^\s*hax:/i,
   /^\s*miss manners:/i,
   /^\s*asking eric:/i,
+  /^\s*date lab:/i,
+  /^\s*solo-ish:/i,
+  /^\s*voraciously:/i,
+  /^\s*ask sahaj:/i,
+  /^\s*dear abby:/i,
+  /^\s*dear prudence:/i,
+  /^\s*ask amy:/i,
+  /^\s*ask a manager:/i,
   /\badvice column\b/i,
   /\betiquette\b/i,
   /\bmanners\b/i,
@@ -297,6 +314,7 @@ const WAPO_LIFESTYLE_BLOCK_PATTERNS = [
   /\bwhat should i do\b/i,
   /\bdear abby\b/i,
   /\bdear prudence\b/i,
+  /\bhax\b/i,
 ];
 
 function slugify(text: string) {
@@ -729,6 +747,14 @@ function scoreText(text: string) {
   return score;
 }
 
+function normalizeTitleForBlocking(text: string) {
+  return decodeHtmlEntities(normalizeWhitespace(text)).toLowerCase();
+}
+
+function shouldPreferPageImageFirst(sourceName: string) {
+  return sourceName === "Washington Post Lifestyle";
+}
+
 function isBlockedAdviceColumn(title: string, summary: string, content: string) {
   const combined = `${title} ${summary} ${content}`.slice(0, 2000);
   return ADVICE_COLUMN_PATTERNS.some((pattern) => pattern.test(combined));
@@ -742,7 +768,31 @@ function isBlockedWashingtonPostLifestyleStory(
 ) {
   if (sourceName !== "Washington Post Lifestyle") return false;
 
-  const combined = `${title} ${summary} ${content}`.slice(0, 2500);
+  const normalizedTitle = normalizeTitleForBlocking(title);
+  const normalizedSummary = normalizeTitleForBlocking(summary);
+  const normalizedContent = normalizeTitleForBlocking(content).slice(0, 1800);
+  const combined = `${normalizedTitle} ${normalizedSummary} ${normalizedContent}`;
+
+  const blockedTitlePrefixes = [
+    "asking eric",
+    "carolyn hax",
+    "hax",
+    "miss manners",
+    "date lab",
+    "solo-ish",
+    "voraciously",
+    "advice",
+    "ask sahaj",
+    "dear abby",
+    "dear prudence",
+    "ask amy",
+    "ask a manager",
+  ];
+
+  if (blockedTitlePrefixes.some((prefix) => normalizedTitle.startsWith(prefix))) {
+    return true;
+  }
+
   return WAPO_LIFESTYLE_BLOCK_PATTERNS.some((pattern) => pattern.test(combined));
 }
 
@@ -1192,14 +1242,36 @@ export async function GET() {
               .eq("source_url", sourceUrl)
               .maybeSingle();
 
-            let imageUrl = extractImageFromFeed(item, sourceUrl);
-            let imageSource: "feed" | "page" | "existing" | "none" = imageUrl ? "feed" : "none";
+            let imageUrl: string | null = null;
+            let imageSource: "feed" | "page" | "existing" | "none" = "none";
 
-            if (!imageUrl) {
+            if (shouldPreferPageImageFirst(source.name)) {
               const scrapedImage = await extractImageFromArticlePage(sourceUrl);
               if (scrapedImage) {
                 imageUrl = scrapedImage;
                 imageSource = "page";
+              }
+
+              if (!imageUrl) {
+                const feedImage = extractImageFromFeed(item, sourceUrl);
+                if (feedImage) {
+                  imageUrl = feedImage;
+                  imageSource = "feed";
+                }
+              }
+            } else {
+              const feedImage = extractImageFromFeed(item, sourceUrl);
+              if (feedImage) {
+                imageUrl = feedImage;
+                imageSource = "feed";
+              }
+
+              if (!imageUrl) {
+                const scrapedImage = await extractImageFromArticlePage(sourceUrl);
+                if (scrapedImage) {
+                  imageUrl = scrapedImage;
+                  imageSource = "page";
+                }
               }
             }
 
