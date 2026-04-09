@@ -32,7 +32,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v21-wapo-debug";
+const IMPORTER_VERSION = "scored-filter-v22-wapo-timeout-cooking-block";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -240,6 +240,9 @@ const ADVICE_COLUMN_PATTERNS = [
   /\bmy boss'?s alcoholism\b/i,
   /\btable manners\b/i,
   /\betiquette\b/i,
+  /\bcooking advice\b/i,
+  /\brecipe advice\b/i,
+  /\bquestions recipe\b/i,
   /\bdear (abby|prudence)\b/i,
   /\bask(ed|ing)?\s+(eric|amy|abby|sahaj)\b/i,
   /\bcarolyn hax\b/i,
@@ -291,6 +294,10 @@ const WAPO_LIFESTYLE_BLOCK_PATTERNS = [
   /\badvice column\b/i,
   /\betiquette\b/i,
   /\bmanners\b/i,
+  /\bcooking advice\b/i,
+  /\brecipe advice\b/i,
+  /\bquestions recipe\b/i,
+  /\brecipe questions\b/i,
   /\bshould i\b/i,
   /\bam i wrong\b/i,
   /\bam i enabling\b/i,
@@ -798,6 +805,10 @@ function isBlockedWashingtonPostLifestyleStory(
     return true;
   }
 
+  if (/questions-recipe-cooking-advice/i.test(normalizedTitle)) {
+    return true;
+  }
+
   return WAPO_LIFESTYLE_BLOCK_PATTERNS.some((pattern) => pattern.test(combined));
 }
 
@@ -1183,9 +1194,7 @@ async function extractImageFromArticlePage(
 
     if (!response.ok) {
       if (debugLogs) {
-        debugLogs.push(
-          `WaPo image debug: fetch failed status=${response.status} url=${articleUrl}`
-        );
+        debugLogs.push(`WaPo image debug: fetch failed status=${response.status} url=${articleUrl}`);
       }
       return null;
     }
@@ -1202,7 +1211,9 @@ async function extractImageFromArticlePage(
       debugLogs.push(
         `WaPo image debug top candidates: ${JSON.stringify(result.all.slice(0, 8))}`
       );
-      debugLogs.push(`WaPo image debug selected: ${result.best ?? "NONE"}`);
+      debugLogs.push(
+        `WaPo image debug selected: ${result.best ?? "NONE"}`
+      );
 
       return result.best;
     }
@@ -1210,9 +1221,7 @@ async function extractImageFromArticlePage(
     return extractBestImageFromHtml(html, articleUrl);
   } catch (err) {
     if (debugLogs) {
-      debugLogs.push(
-        `WaPo image debug: fetch error url=${articleUrl} error=${String(err)}`
-      );
+      debugLogs.push(`WaPo image debug: fetch error url=${articleUrl} error=${String(err)}`);
     }
     return null;
   } finally {
