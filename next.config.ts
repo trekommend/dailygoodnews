@@ -7,6 +7,12 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "positive.news" },
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "cdn.pixabay.com" },
+
+      // Washington Post / Arc / related image hosts
+      { protocol: "https", hostname: "www.washingtonpost.com" },
+      { protocol: "https", hostname: "arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com" },
+      { protocol: "https", hostname: "cloudfront-us-east-1.images.arcpublishing.com" },
+      { protocol: "https", hostname: "images.arcpublishing.com" },
     ],
   },
   async headers() {
@@ -14,15 +20,10 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          // Prevent your site from being embedded in iframes (clickjacking)
           { key: "X-Frame-Options", value: "DENY" },
-          // Prevent browsers from MIME-sniffing responses
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // Control how much referrer info is sent
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // Disable browser features you don't need
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          // Basic XSS protection for older browsers
           { key: "X-XSS-Protection", value: "1; mode=block" },
         ],
       },
