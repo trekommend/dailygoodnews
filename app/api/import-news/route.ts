@@ -41,7 +41,7 @@ type ImageDebugResult = {
   best: string | null;
 };
 
-const IMPORTER_VERSION = "scored-filter-v23-wapo-url-block-timeout-30s";
+const IMPORTER_VERSION = "scored-filter-v24-wapo-partial-html";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -991,10 +991,22 @@ function extractMetaAttributeValues(
 ): string[] {
   const escaped = propertyOrName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const patterns = [
-    new RegExp(`<meta[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]+content="([^"]+)"[^>]*>`, "gi"),
-    new RegExp(`<meta[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]+content='([^']+)'[^>]*>`, "gi"),
-    new RegExp(`<meta[^>]+content="([^"]+)"[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]*>`, "gi"),
-    new RegExp(`<meta[^>]+content='([^']+)'[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]*>`, "gi"),
+    new RegExp(
+      `<meta[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]+content="([^"]+)"[^>]*>`,
+      "gi"
+    ),
+    new RegExp(
+      `<meta[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]+content='([^']+)'[^>]*>`,
+      "gi"
+    ),
+    new RegExp(
+      `<meta[^>]+content="([^"]+)"[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]*>`,
+      "gi"
+    ),
+    new RegExp(
+      `<meta[^>]+content='([^']+)'[^>]+(?:property|name|itemprop)=["']${escaped}["'][^>]*>`,
+      "gi"
+    ),
   ];
 
   const results: string[] = [];
@@ -1033,7 +1045,9 @@ function extractImageCandidatesFromJsonLd(html: string, articleUrl: string): str
     const imageMatches = [
       ...jsonText.matchAll(/"image"\s*:\s*"([^"]+)"/gi),
       ...jsonText.matchAll(/"contentUrl"\s*:\s*"([^"]+)"/gi),
-      ...jsonText.matchAll(/"url"\s*:\s*"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi),
+      ...jsonText.matchAll(
+        /"url"\s*:\s*"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi
+      ),
     ];
 
     for (const match of imageMatches) {
@@ -1114,7 +1128,10 @@ function prioritizeWaPoCandidates(candidates: string[]): string[] {
     let score = 0;
 
     if (/wp-apps\/imrs\.php/i.test(url)) score += 10;
-    if (/arc-anglerfish|arcpublishing|cloudfront-us-east-1\.images\.arcpublishing\.com/i.test(url)) score += 8;
+    if (
+      /arc-anglerfish|arcpublishing|cloudfront-us-east-1\.images\.arcpublishing\.com/i.test(url)
+    )
+      score += 8;
     if (/[?&]w=1440\b/i.test(url)) score += 6;
     if (/[?&]w=1200\b/i.test(url)) score += 5;
     if (/[?&]w=1024\b/i.test(url)) score += 4;
@@ -1186,6 +1203,42 @@ function extractBestImageFromHtml(html: string, articleUrl: string): string | nu
   return extractBestImageWithDebug(html, articleUrl).best;
 }
 
+async function readPartialResponseText(
+  response: Response,
+  maxChars: number,
+  stopPatterns: RegExp[] = []
+): Promise<string> {
+  if (!response.body) {
+    const text = await response.text();
+    return text.slice(0, maxChars);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+
+  while (text.length < maxChars) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    text += decoder.decode(value, { stream: true });
+
+    if (stopPatterns.some((pattern) => pattern.test(text))) {
+      break;
+    }
+  }
+
+  text += decoder.decode();
+
+  try {
+    await reader.cancel();
+  } catch {
+    // ignore cancel issues
+  }
+
+  return text.slice(0, maxChars);
+}
+
 async function extractImageFromArticlePage(
   articleUrl: string,
   debugLogs?: string[]
@@ -1220,18 +1273,26 @@ async function extractImageFromArticlePage(
       return null;
     }
 
-    const html = await response.text();
+    const html = isWaPo
+      ? await readPartialResponseText(response, 250000, [
+          /<\/head>/i,
+          /"og:image"/i,
+          /twitter:image/i,
+          /application\/ld\+json/i,
+          /wp-apps\/imrs\.php/i,
+          /arcpublishing/i,
+        ])
+      : await response.text();
 
     if (debugLogs && isWaPo) {
       const result = extractBestImageWithDebug(html, articleUrl);
 
       debugLogs.push(`WaPo image debug: url=${articleUrl}`);
+      debugLogs.push(`WaPo image debug html length: ${html.length}`);
       debugLogs.push(
         `WaPo image debug counts: meta=${result.meta.length}, jsonLd=${result.jsonLd.length}, generic=${result.generic.length}, scripts=${result.scripts.length}, all=${result.all.length}`
       );
-      debugLogs.push(
-        `WaPo image debug top candidates: ${JSON.stringify(result.all.slice(0, 8))}`
-      );
+      debugLogs.push(`WaPo image debug top candidates: ${JSON.stringify(result.all.slice(0, 8))}`);
       debugLogs.push(`WaPo image debug selected: ${result.best ?? "NONE"}`);
 
       return result.best;
