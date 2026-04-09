@@ -32,7 +32,16 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v22-wapo-timeout-cooking-block";
+type ImageDebugResult = {
+  meta: string[];
+  jsonLd: string[];
+  generic: string[];
+  scripts: string[];
+  all: string[];
+  best: string | null;
+};
+
+const IMPORTER_VERSION = "scored-filter-v23-wapo-url-block-timeout-30s";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -767,6 +776,27 @@ function shouldPreferPageImageFirst(sourceName: string) {
   return sourceName === "Washington Post Lifestyle";
 }
 
+function isBlockedWashingtonPostLifestyleUrl(sourceName: string, sourceUrl: string) {
+  if (sourceName !== "Washington Post Lifestyle") return false;
+
+  const normalizedUrl = sourceUrl.toLowerCase();
+
+  const blockedUrlPatterns = [
+    /\/questions-recipe-cooking-advice\/?$/i,
+    /\/asking-eric\//i,
+    /\/carolyn-hax\//i,
+    /\/miss-manners\//i,
+    /\/date-lab\//i,
+    /\/solo-ish\//i,
+    /\/voraciously\//i,
+    /\/ask-sahaj\//i,
+    /\/dear-abby\//i,
+    /\/dear-prudence\//i,
+  ];
+
+  return blockedUrlPatterns.some((pattern) => pattern.test(normalizedUrl));
+}
+
 function isBlockedAdviceColumn(title: string, summary: string, content: string) {
   const combined = `${title} ${summary} ${content}`.slice(0, 2000);
   return ADVICE_COLUMN_PATTERNS.some((pattern) => pattern.test(combined));
@@ -1128,15 +1158,6 @@ function pickBestImageCandidate(candidates: string[], articleUrl?: string): stri
   return null;
 }
 
-type ImageDebugResult = {
-  meta: string[];
-  jsonLd: string[];
-  generic: string[];
-  scripts: string[];
-  all: string[];
-  best: string | null;
-};
-
 function extractBestImageWithDebug(html: string, articleUrl: string): ImageDebugResult {
   const meta = extractImageCandidatesFromMeta(html, articleUrl);
   const jsonLd = extractImageCandidatesFromJsonLd(html, articleUrl);
@@ -1171,7 +1192,7 @@ async function extractImageFromArticlePage(
 ): Promise<string | null> {
   const controller = new AbortController();
   const isWaPo = /washingtonpost\.com/i.test(articleUrl);
-  const timeoutMs = isWaPo ? 15000 : 8000;
+  const timeoutMs = isWaPo ? 30000 : 8000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -1211,9 +1232,7 @@ async function extractImageFromArticlePage(
       debugLogs.push(
         `WaPo image debug top candidates: ${JSON.stringify(result.all.slice(0, 8))}`
       );
-      debugLogs.push(
-        `WaPo image debug selected: ${result.best ?? "NONE"}`
-      );
+      debugLogs.push(`WaPo image debug selected: ${result.best ?? "NONE"}`);
 
       return result.best;
     }
@@ -1290,6 +1309,15 @@ export async function GET() {
 
             const safeSummary =
               summary || truncateNicely(cleanStoryText(rawSummary || title), 500);
+
+            if (isBlockedWashingtonPostLifestyleUrl(source.name, sourceUrl)) {
+              skippedCount += 1;
+              sourceSkipped += 1;
+              logs.push(
+                `Skipped "${title}" from ${source.name} (rejected by Washington Post URL blocker)`
+              );
+              continue;
+            }
 
             const decision = decideImportStory(
               title,
