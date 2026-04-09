@@ -122,7 +122,7 @@ export default async function HomePage() {
           borderRadius: 24,
           overflow: "hidden",
           boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-          marginBottom: 40,
+          marginBottom: "clamp(24px, 6vw, 40px)"
         }}
       >
         {featuredStory.image_url ? (
@@ -130,11 +130,11 @@ export default async function HomePage() {
             src={featuredStory.image_url}
             alt={featuredStory.title}
             style={{
-              width: "100%",
-              height: 420,
-              objectFit: "cover",
-              display: "block",
-            }}
+  width: "100%",
+  height: "clamp(220px, 40vw, 420px)",
+  objectFit: "cover",
+  display: "block",
+}}
           />
         ) : null}
 
