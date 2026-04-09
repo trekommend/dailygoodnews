@@ -32,7 +32,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v19-wapo-hax-page-first";
+const IMPORTER_VERSION = "scored-filter-v20-wapo-image-fallback";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -381,6 +381,11 @@ function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
   const cleaned = absoluteUrl(raw, baseUrl);
 
   if (!/^https?:\/\//i.test(cleaned)) return null;
+
+  if (/wp-apps\/imrs\.php/i.test(cleaned)) {
+    return cleaned;
+  }
+
   if (/\.svg(\?|$)/i.test(cleaned)) return null;
   if (/sprite|icon|logo|avatar|1x1|pixel/i.test(cleaned)) return null;
   if (/generic-newsletter-signup/i.test(cleaned)) return null;
@@ -1073,6 +1078,8 @@ function prioritizeWaPoCandidates(candidates: string[]): string[] {
     if (/[?&]w=1200\b/i.test(url)) score += 5;
     if (/[?&]w=1024\b/i.test(url)) score += 4;
     if (/[?&]w=440\b/i.test(url)) score -= 2;
+    if (/\.jpg(\?|$)/i.test(url)) score += 2;
+    if (/\.webp(\?|$)/i.test(url)) score += 1;
     if (/author-service-images|arc-authors/i.test(url)) score -= 5;
     if (/generic-newsletter-signup/i.test(url)) score -= 10;
     if (/\.png(\?|$)/i.test(url) && /author-service-images|arc-authors/i.test(url)) score -= 3;
@@ -1117,7 +1124,14 @@ function extractBestImageFromHtml(html: string, articleUrl: string): string | nu
   const scripts = extractImageCandidatesFromScripts(html, articleUrl);
 
   const all = [...meta, ...jsonLd, ...generic, ...scripts];
-  return pickBestImageCandidate(all, articleUrl);
+
+  const best = pickBestImageCandidate(all, articleUrl);
+
+  if (!best && /washingtonpost\.com/i.test(articleUrl) && all.length > 0) {
+    return all[0];
+  }
+
+  return best;
 }
 
 async function extractImageFromArticlePage(articleUrl: string): Promise<string | null> {
