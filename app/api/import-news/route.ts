@@ -1159,7 +1159,9 @@ async function extractImageFromArticlePage(
   debugLogs?: string[]
 ): Promise<string | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const isWaPo = /washingtonpost\.com/i.test(articleUrl);
+  const timeoutMs = isWaPo ? 15000 : 8000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(articleUrl, {
@@ -1181,14 +1183,16 @@ async function extractImageFromArticlePage(
 
     if (!response.ok) {
       if (debugLogs) {
-        debugLogs.push(`WaPo image debug: fetch failed status=${response.status} url=${articleUrl}`);
+        debugLogs.push(
+          `WaPo image debug: fetch failed status=${response.status} url=${articleUrl}`
+        );
       }
       return null;
     }
 
     const html = await response.text();
 
-    if (debugLogs && /washingtonpost\.com/i.test(articleUrl)) {
+    if (debugLogs && isWaPo) {
       const result = extractBestImageWithDebug(html, articleUrl);
 
       debugLogs.push(`WaPo image debug: url=${articleUrl}`);
@@ -1198,9 +1202,7 @@ async function extractImageFromArticlePage(
       debugLogs.push(
         `WaPo image debug top candidates: ${JSON.stringify(result.all.slice(0, 8))}`
       );
-      debugLogs.push(
-        `WaPo image debug selected: ${result.best ?? "NONE"}`
-      );
+      debugLogs.push(`WaPo image debug selected: ${result.best ?? "NONE"}`);
 
       return result.best;
     }
@@ -1208,7 +1210,9 @@ async function extractImageFromArticlePage(
     return extractBestImageFromHtml(html, articleUrl);
   } catch (err) {
     if (debugLogs) {
-      debugLogs.push(`WaPo image debug: fetch error url=${articleUrl} error=${String(err)}`);
+      debugLogs.push(
+        `WaPo image debug: fetch error url=${articleUrl} error=${String(err)}`
+      );
     }
     return null;
   } finally {
