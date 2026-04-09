@@ -32,7 +32,7 @@ type ImportDecision = {
   reason: string;
 };
 
-const IMPORTER_VERSION = "scored-filter-v20-wapo-image-fallback";
+const IMPORTER_VERSION = "scored-filter-v21-wapo-debug";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -1117,7 +1117,16 @@ function pickBestImageCandidate(candidates: string[], articleUrl?: string): stri
   return null;
 }
 
-function extractBestImageFromHtml(html: string, articleUrl: string): string | null {
+type ImageDebugResult = {
+  meta: string[];
+  jsonLd: string[];
+  generic: string[];
+  scripts: string[];
+  all: string[];
+  best: string | null;
+};
+
+function extractBestImageWithDebug(html: string, articleUrl: string): ImageDebugResult {
   const meta = extractImageCandidatesFromMeta(html, articleUrl);
   const jsonLd = extractImageCandidatesFromJsonLd(html, articleUrl);
   const generic = extractImageCandidatesFromGenericHtml(html, articleUrl);
@@ -1125,16 +1134,30 @@ function extractBestImageFromHtml(html: string, articleUrl: string): string | nu
 
   const all = [...meta, ...jsonLd, ...generic, ...scripts];
 
-  const best = pickBestImageCandidate(all, articleUrl);
+  let best = pickBestImageCandidate(all, articleUrl);
 
   if (!best && /washingtonpost\.com/i.test(articleUrl) && all.length > 0) {
-    return all[0];
+    best = all[0];
   }
 
-  return best;
+  return {
+    meta,
+    jsonLd,
+    generic,
+    scripts,
+    all,
+    best,
+  };
 }
 
-async function extractImageFromArticlePage(articleUrl: string): Promise<string | null> {
+function extractBestImageFromHtml(html: string, articleUrl: string): string | null {
+  return extractBestImageWithDebug(html, articleUrl).best;
+}
+
+async function extractImageFromArticlePage(
+  articleUrl: string,
+  debugLogs?: string[]
+): Promise<string | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
 
@@ -1156,11 +1179,37 @@ async function extractImageFromArticlePage(articleUrl: string): Promise<string |
       signal: controller.signal,
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (debugLogs) {
+        debugLogs.push(`WaPo image debug: fetch failed status=${response.status} url=${articleUrl}`);
+      }
+      return null;
+    }
 
     const html = await response.text();
+
+    if (debugLogs && /washingtonpost\.com/i.test(articleUrl)) {
+      const result = extractBestImageWithDebug(html, articleUrl);
+
+      debugLogs.push(`WaPo image debug: url=${articleUrl}`);
+      debugLogs.push(
+        `WaPo image debug counts: meta=${result.meta.length}, jsonLd=${result.jsonLd.length}, generic=${result.generic.length}, scripts=${result.scripts.length}, all=${result.all.length}`
+      );
+      debugLogs.push(
+        `WaPo image debug top candidates: ${JSON.stringify(result.all.slice(0, 8))}`
+      );
+      debugLogs.push(
+        `WaPo image debug selected: ${result.best ?? "NONE"}`
+      );
+
+      return result.best;
+    }
+
     return extractBestImageFromHtml(html, articleUrl);
-  } catch {
+  } catch (err) {
+    if (debugLogs) {
+      debugLogs.push(`WaPo image debug: fetch error url=${articleUrl} error=${String(err)}`);
+    }
     return null;
   } finally {
     clearTimeout(timeout);
@@ -1260,7 +1309,7 @@ export async function GET() {
             let imageSource: "feed" | "page" | "existing" | "none" = "none";
 
             if (shouldPreferPageImageFirst(source.name)) {
-              const scrapedImage = await extractImageFromArticlePage(sourceUrl);
+              const scrapedImage = await extractImageFromArticlePage(sourceUrl, logs);
               if (scrapedImage) {
                 imageUrl = scrapedImage;
                 imageSource = "page";
