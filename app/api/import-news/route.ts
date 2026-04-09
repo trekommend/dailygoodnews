@@ -41,7 +41,7 @@ type ImageDebugResult = {
   best: string | null;
 };
 
-const IMPORTER_VERSION = "scored-filter-v24-wapo-partial-html";
+const IMPORTER_VERSION = "scored-filter-v25-wapo-require-image";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -1443,6 +1443,15 @@ export async function GET() {
             if (!imageUrl && existingRow?.image_url) {
               imageUrl = existingRow.image_url;
               imageSource = "existing";
+            }
+
+            if (source.name === "Washington Post Lifestyle" && !imageUrl) {
+              skippedCount += 1;
+              sourceSkipped += 1;
+              sourceNoImages += 1;
+              noImageCount += 1;
+              logs.push(`Skipped "${title}" from ${source.name} (no image found)`);
+              continue;
             }
 
             const trustedBonus = source.trusted ? 1 : 0;
