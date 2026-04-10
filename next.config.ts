@@ -2,22 +2,21 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-  remotePatterns: [
-    { protocol: "https", hostname: "www.goodnewsnetwork.org" },
-    { protocol: "https", hostname: "positive.news" },
-    { protocol: "https", hostname: "images.unsplash.com" },
-    { protocol: "https", hostname: "cdn.pixabay.com" },
+    remotePatterns: [
+      { protocol: "https", hostname: "www.goodnewsnetwork.org" },
+      { protocol: "https", hostname: "positive.news" },
+      { protocol: "https", hostname: "www.positive.news" },
+      { protocol: "https", hostname: "images.unsplash.com" },
+      { protocol: "https", hostname: "cdn.pixabay.com" },
+      { protocol: "https", hostname: "cdn.prod.website-files.com" },
 
-    // ✅ ADD THIS
-    { protocol: "https", hostname: "cdn.prod.website-files.com" },
-
-    // Washington Post / Arc
-    { protocol: "https", hostname: "www.washingtonpost.com" },
-    { protocol: "https", hostname: "arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com" },
-    { protocol: "https", hostname: "cloudfront-us-east-1.images.arcpublishing.com" },
-    { protocol: "https", hostname: "images.arcpublishing.com" },
-  ],
-},
+      // Washington Post / Arc / related image hosts
+      { protocol: "https", hostname: "www.washingtonpost.com" },
+      { protocol: "https", hostname: "arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com" },
+      { protocol: "https", hostname: "cloudfront-us-east-1.images.arcpublishing.com" },
+      { protocol: "https", hostname: "images.arcpublishing.com" },
+    ],
+  },
   async headers() {
     return [
       {
