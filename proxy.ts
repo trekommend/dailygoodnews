@@ -9,7 +9,6 @@ export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-  // If env vars are missing, just continue
   if (!supabaseUrl || !publishableKey) {
     return response;
   }
@@ -24,9 +23,7 @@ export async function proxy(request: NextRequest) {
           request.cookies.set(name, value);
         });
 
-        response = NextResponse.next({
-          request,
-        });
+        response = NextResponse.next({ request });
 
         cookiesToSet.forEach(({ name, value, options }) => {
           response.cookies.set(name, value, options);
@@ -35,8 +32,29 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // Refresh auth session (safe no-op if not logged in)
-  await supabase.auth.getClaims();
+  // 🔐 Get user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // ============================================
+  // 🚨 ADMIN ROUTE PROTECTION
+  // ============================================
+  if (request.nextUrl.pathname.startsWith("/admin")) {
+    if (!user) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile || profile.role !== "admin") {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+  }
 
   return response;
 }

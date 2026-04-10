@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { supabase } from "../lib/supabase";
 
 type Story = {
@@ -122,20 +123,23 @@ export default async function HomePage() {
           borderRadius: 24,
           overflow: "hidden",
           boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-          marginBottom: "clamp(24px, 6vw, 40px)"
+          marginBottom: "clamp(24px, 6vw, 40px)",
         }}
       >
         {featuredStory.image_url ? (
-          <img
-            src={featuredStory.image_url}
-            alt={featuredStory.title}
-            style={{
-  width: "100%",
-  height: "clamp(220px, 40vw, 420px)",
-  objectFit: "cover",
-  display: "block",
-}}
-          />
+          <div style={{ position: "relative", width: "100%", height: "clamp(220px, 40vw, 420px)" }}>
+            <Image
+              src={featuredStory.image_url}
+              alt={featuredStory.title}
+              fill
+              priority
+              sizes="(max-width: 768px) 100vw, 1100px"
+              style={{
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          </div>
         ) : null}
 
         <div style={{ padding: 24 }}>
@@ -250,16 +254,18 @@ export default async function HomePage() {
               }}
             >
               {story.image_url ? (
-                <img
-                  src={story.image_url}
-                  alt={story.title}
-                  style={{
-                    width: "100%",
-                    height: 180,
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                />
+                <div style={{ position: "relative", width: "100%", height: 180 }}>
+                  <Image
+                    src={story.image_url}
+                    alt={story.title}
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 33vw"
+                    style={{
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                </div>
               ) : null}
 
               <div style={{ padding: 18 }}>
