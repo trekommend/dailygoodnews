@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { supabase } from "../lib/supabase";
 
 type Story = {
@@ -90,7 +89,6 @@ export default async function HomePage() {
     );
   }
 
-  // Prefer recent candidates for the hero (last 72 hours).
   const recentHeroCandidates = stories.filter((story) => getAgeHours(story) <= 72);
 
   const featuredStory =
@@ -127,19 +125,16 @@ export default async function HomePage() {
         }}
       >
         {featuredStory.image_url ? (
-          <div style={{ position: "relative", width: "100%", height: "clamp(220px, 40vw, 420px)" }}>
-            <Image
-              src={featuredStory.image_url}
-              alt={featuredStory.title}
-              fill
-              priority
-              sizes="(max-width: 768px) 100vw, 1100px"
-              style={{
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
-          </div>
+          <img
+            src={featuredStory.image_url}
+            alt={featuredStory.title}
+            style={{
+              width: "100%",
+              height: "clamp(220px, 40vw, 420px)",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
         ) : null}
 
         <div style={{ padding: 24 }}>
@@ -254,19 +249,31 @@ export default async function HomePage() {
               }}
             >
               {story.image_url ? (
-                <div style={{ position: "relative", width: "100%", height: 180 }}>
-                  <Image
-                    src={story.image_url}
-                    alt={story.title}
-                    fill
-                    sizes="(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 33vw"
-                    style={{
-                      objectFit: "cover",
-                      display: "block",
-                    }}
-                  />
+                <img
+                  src={story.image_url}
+                  alt={story.title}
+                  style={{
+                    width: "100%",
+                    height: 180,
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "100%",
+                    height: 180,
+                    background: "#f1f5f9",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 32,
+                  }}
+                >
+                  🌤️
                 </div>
-              ) : null}
+              )}
 
               <div style={{ padding: 18 }}>
                 <div
