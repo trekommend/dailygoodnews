@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "cdn.pixabay.com" },
       { protocol: "https", hostname: "cdn.prod.website-files.com" },
 
+      // Fox
+      { protocol: "https", hostname: "a57.foxnews.com" },
+      { protocol: "https", hostname: "static.foxnews.com" },
+
       // Washington Post / Arc / related image hosts
       { protocol: "https", hostname: "www.washingtonpost.com" },
       { protocol: "https", hostname: "arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com" },
