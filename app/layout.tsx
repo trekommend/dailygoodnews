@@ -1,5 +1,36 @@
 import "./globals.css";
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ||
+      "https://your-domain.vercel.app"
+  ),
+  title: {
+    default: "Daily Good News",
+    template: "%s | Daily Good News",
+  },
+  description:
+    "A daily source of uplifting, positive news from around the world. Real stories that inspire hope.",
+  openGraph: {
+    title: "Daily Good News",
+    description:
+      "A daily source of uplifting, positive news from around the world.",
+    siteName: "Daily Good News",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Daily Good News",
+    description:
+      "A daily source of uplifting, positive news from around the world.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
 
 export default function RootLayout({
   children,
