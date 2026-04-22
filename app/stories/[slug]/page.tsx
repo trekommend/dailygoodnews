@@ -30,117 +30,9 @@ async function getStory(slug: string): Promise<Story | null> {
   return (data as Story | null) ?? null;
 }
 
-function stripHtml(html: string) {
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<\/div>/gi, "\n")
-    .replace(/<li[^>]*>/gi, "\n• ")
-    .replace(/<\/li>/gi, "\n")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+\n/g, "\n")
-    .replace(/\n\s+/g, "\n");
-}
-
-function decodeHtmlEntities(text: string) {
-  return text
-    .replace(/&#8217;/g, "'")
-    .replace(/&#8216;/g, "'")
-    .replace(/&#8220;/g, '"')
-    .replace(/&#8221;/g, '"')
-    .replace(/&#8230;/g, "...")
-    .replace(/&#8242;/g, "'")
-    .replace(/&#8243;/g, '"')
-    .replace(/&#038;/g, "&")
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&nbsp;/g, " ");
-}
-
-function removeTrailingSourceBoilerplate(text: string) {
-  if (!text) return "";
-
-  return text
-    .replace(/\bThe post .*? appeared first on .*?\.?$/gi, "")
-    .replace(/\bOriginally published on .*?\.?$/gi, "")
-    .replace(/\bThis article originally appeared on .*?\.?$/gi, "")
-    .replace(/\bAppeared first on .*?\.?$/gi, "")
-    .replace(/\bSource: .*?$/gi, "")
-    .replace(/\bCourtesy of .*?$/gi, "")
-    .replace(/\bvia .*?$/gi, "")
-    .replace(
-      /\s+(of|on|from)\s+(Good News Network|Positive News|Good Good Good|Fox News|Washington Post|ESPN)\.?$/gi,
-      ""
-    )
-    .trim();
-}
-
-function cleanStoryText(text: string) {
-  return removeTrailingSourceBoilerplate(
-    decodeHtmlEntities(stripHtml(text))
-      .replace(/\[\u2026\]|\[\.\.\.\]/g, "")
-      .replace(/The post .*? appeared first on .*?\.?/gi, "")
-      .replace(/Continue reading.*$/gi, "")
-      .replace(/Read more.*$/gi, "")
-      .replace(/Originally published on .*?\.?/gi, "")
-      .replace(/This article originally appeared on .*?\.?/gi, "")
-      .replace(/Copyright \d{4}.*$/gi, "")
-      .replace(/[ \t]{2,}/g, " ")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim()
-  );
-}
-
-function normalizeForComparison(text: string) {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function splitParagraphs(text: string) {
-  return text
-    .split(/\n{2,}|\r\n\r\n+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-}
-
-function truncateForMeta(text: string, maxLength = 160) {
-  if (text.length <= maxLength) return text;
-
-  const sliced = text.slice(0, maxLength);
-  const lastSentenceEnd = Math.max(
-    sliced.lastIndexOf(". "),
-    sliced.lastIndexOf("! "),
-    sliced.lastIndexOf("? ")
-  );
-
-  if (lastSentenceEnd > 80) {
-    return `${sliced.slice(0, lastSentenceEnd + 1).trim()}...`;
-  }
-
-  const lastSpace = sliced.lastIndexOf(" ");
-  if (lastSpace > 80) {
-    return `${sliced.slice(0, lastSpace).trim()}...`;
-  }
-
-  return `${sliced.trim()}...`;
-}
-
-function formatReadableDate(dateString: string | null) {
-  if (!dateString) return null;
-
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return date.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+/* =========================
+   METADATA
+========================= */
 
 export async function generateMetadata({
   params,
@@ -148,169 +40,147 @@ export async function generateMetadata({
   const { slug } = await params;
   const story = await getStory(slug);
 
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
   if (!story) {
     return {
       title: "Story not found | Daily Good News",
+      robots: { index: false, follow: false },
     };
   }
 
-  const description = truncateForMeta(
-    cleanStoryText(story.summary ?? story.content ?? "")
-  );
+  const cleanText = (story.summary ?? story.content ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const description =
+    cleanText.slice(0, 160) ||
+    "A positive news story from Daily Good News.";
+
+  const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
+
+  const ogImage = story.image_url
+    ? story.image_url
+    : `${siteUrl}/og-image.jpg`;
 
   return {
     title: `${story.title} | Daily Good News`,
-    description: description || "A positive news story from Daily Good News.",
+    description,
+    alternates: {
+      canonical: canonicalUrl,
+    },
     openGraph: {
+      type: "article",
+      url: canonicalUrl,
       title: story.title,
       description,
-      images: story.image_url ? [story.image_url] : [],
+      siteName: "Daily Good News",
+      images: [{ url: ogImage }],
+      publishedTime: story.publish_date ?? undefined,
     },
     twitter: {
       card: "summary_large_image",
       title: story.title,
       description,
-      images: story.image_url ? [story.image_url] : [],
+      images: [ogImage],
     },
   };
 }
+
+/* =========================
+   PAGE
+========================= */
 
 export default async function StoryPage({ params }: StoryPageProps) {
   const { slug } = await params;
   const story = await getStory(slug);
 
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
   if (!story) {
     return (
       <article style={{ maxWidth: 760, margin: "0 auto", padding: 40 }}>
         <h1>Story not found.</h1>
-        <p>We couldn’t find that article.</p>
       </article>
     );
   }
 
-  const summaryText = cleanStoryText(story.summary ?? "");
-  const contentText = cleanStoryText(story.content ?? "");
-  const summaryParagraphs = splitParagraphs(summaryText);
-  const contentParagraphs = splitParagraphs(contentText);
-  const formattedDate = formatReadableDate(story.publish_date);
+  const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
+  const imageUrl = story.image_url
+    ? story.image_url
+    : `${siteUrl}/og-image.jpg`;
 
-  const normalizedSummary = normalizeForComparison(summaryText);
-  const normalizedContent = normalizeForComparison(contentText);
+  const authorName =
+    story.is_reader_submission && story.submitted_by_name
+      ? story.submitted_by_name
+      : "Daily Good News";
 
-  const showBody =
-    !!contentText &&
-    normalizedContent.length > normalizedSummary.length + 40 &&
-    !normalizedContent.startsWith(normalizedSummary);
+  /* =========================
+     STRUCTURED DATA
+  ========================= */
+
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: story.title,
+    image: [imageUrl],
+    datePublished: story.publish_date,
+    author: {
+      "@type": "Person",
+      name: authorName,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "Daily Good News",
+      logo: {
+        "@type": "ImageObject",
+        url: `${siteUrl}/og-image.jpg`,
+      },
+    },
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": canonicalUrl,
+    },
+  };
 
   return (
     <article style={{ maxWidth: 760, margin: "0 auto", padding: 40 }}>
-      <div style={{ marginBottom: 24 }}>
-        <small style={{ textTransform: "capitalize", color: "#64748b" }}>
-          {story.category_slug ?? "hope"}
-          {formattedDate ? ` • ${formattedDate}` : ""}
-        </small>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(structuredData),
+        }}
+      />
 
-        <h1 style={{ fontSize: "2.5rem", lineHeight: 1.15, margin: "12px 0 16px" }}>
-          {story.title}
-        </h1>
+      <h1>{story.title}</h1>
 
-        {summaryParagraphs.length > 0 ? (
-          <div style={{ marginTop: 8 }}>
-            {summaryParagraphs.map((paragraph, index) => (
-              <p
-                key={`summary-${index}`}
-                style={{
-                  fontSize: 18,
-                  color: "#475569",
-                  lineHeight: 1.75,
-                  margin: index === summaryParagraphs.length - 1 ? "0" : "0 0 16px",
-                }}
-              >
-                {paragraph}
-              </p>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      {story.image_url ? (
-        <div
+      {story.image_url && (
+        <img
+          src={story.image_url}
+          alt={story.title}
           style={{
-            marginBottom: 28,
+            width: "100%",
+            maxHeight: 420,
+            objectFit: "cover",
             borderRadius: 20,
-            overflow: "hidden",
-            background: "#f1f5f9",
+            margin: "20px 0",
           }}
-        >
-          <img
-            src={story.image_url}
-            alt={story.title}
-            style={{
-              width: "100%",
-              maxHeight: 420,
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
-        </div>
-      ) : null}
-
-      {showBody ? (
-        <div
-          style={{
-            fontSize: 18,
-            lineHeight: 1.8,
-            color: "#0f172a",
-          }}
-        >
-          {contentParagraphs.map((paragraph, index) => (
-            <p
-              key={`content-${index}`}
-              style={{
-                margin: index === contentParagraphs.length - 1 ? "0" : "0 0 20px",
-              }}
-            >
-              {paragraph}
-            </p>
-          ))}
-        </div>
-      ) : null}
+        />
+      )}
 
       <div
         style={{
-          marginTop: 36,
-          paddingTop: 20,
-          borderTop: "1px solid #e2e8f0",
-          color: "#475569",
-          fontSize: 15,
-          lineHeight: 1.6,
+          fontSize: 18,
+          lineHeight: 1.8,
+          color: "#0f172a",
         }}
-      >
-        {story.source_url && story.source_name ? (
-          <div style={{ marginBottom: story.is_reader_submission && story.submitted_by_name ? 8 : 0 }}>
-            Originally published on{" "}
-            <a
-              href={story.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                color: "#0f172a",
-                fontWeight: 600,
-                textDecoration: "underline",
-              }}
-            >
-              {story.source_name}
-            </a>
-            .
-          </div>
-        ) : null}
-
-        {story.is_reader_submission && story.submitted_by_name ? (
-          <div>
-            Submitted by <span style={{ fontWeight: 600 }}>{story.submitted_by_name}</span>
-          </div>
-        ) : null}
-      </div>
+        dangerouslySetInnerHTML={{
+          __html: story.content ?? "",
+        }}
+      />
     </article>
   );
 }

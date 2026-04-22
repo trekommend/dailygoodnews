@@ -27,9 +27,9 @@ export const metadata: Metadata = {
       "A daily source of uplifting, positive news from around the world.",
   },
   robots: {
-    index: true,
-    follow: true,
-  },
+  index: process.env.NODE_ENV === "production",
+  follow: process.env.NODE_ENV === "production",
+},
 };
 
 export default function RootLayout({
