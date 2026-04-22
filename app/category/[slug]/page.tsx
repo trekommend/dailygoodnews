@@ -28,17 +28,9 @@ function formatDate(dateString?: string | null) {
 export default async function CategoryPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
-  const slug = params.slug;
-
-  if (!slug) {
-    return (
-      <main style={{ maxWidth: 900, margin: "auto", padding: 40 }}>
-        <h1>Category not found</h1>
-      </main>
-    );
-  }
+  const { slug } = await params;
 
   const { data, error } = await supabase
     .from("stories")
