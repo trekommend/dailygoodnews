@@ -18,6 +18,7 @@ type SubmissionDetail = {
   author_bio: string | null;
   location_text: string | null;
   image_url: string | null;
+  video_url: string | null;
   moderation_notes: string | null;
   rejection_reason: string | null;
   submitted_at: string;
@@ -58,6 +59,48 @@ function formatDate(value: string | null) {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function getVideoEmbedUrl(value: string | null) {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      const videoId = url.searchParams.get("v");
+
+      if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}`;
+      }
+
+      const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
+      if (shortsMatch?.[1]) {
+        return `https://www.youtube.com/embed/${shortsMatch[1]}`;
+      }
+    }
+
+    if (host === "youtu.be") {
+      const videoId = url.pathname.split("/").filter(Boolean)[0];
+
+      if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}`;
+      }
+    }
+
+    if (host === "vimeo.com" || host.endsWith(".vimeo.com")) {
+      const videoId = url.pathname.split("/").filter(Boolean)[0];
+
+      if (videoId) {
+        return `https://player.vimeo.com/video/${videoId}`;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 type SubmissionDetailPageProps = {
@@ -108,6 +151,7 @@ export default async function SubmissionDetailPage({
       author_bio,
       location_text,
       image_url,
+      video_url,
       moderation_notes,
       rejection_reason,
       submitted_at,
@@ -129,6 +173,7 @@ export default async function SubmissionDetailPage({
 
   const item = submission as SubmissionDetail;
   const history = (events || []) as EventRow[];
+  const videoEmbedUrl = getVideoEmbedUrl(item.video_url);
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-8">
@@ -150,6 +195,11 @@ export default async function SubmissionDetailPage({
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
               {formatStatus(item.status)}
             </span>
+            {item.video_url ? (
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
+                Video included
+              </span>
+            ) : null}
           </div>
 
           <h1 className="text-3xl font-bold text-gray-900">{item.title}</h1>
@@ -222,6 +272,39 @@ export default async function SubmissionDetailPage({
                   className="break-all font-medium text-emerald-700 hover:text-emerald-800"
                 >
                   {item.source_url}
+                </a>
+              </section>
+            ) : null}
+
+            {item.video_url ? (
+              <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-3 text-xl font-semibold text-gray-900">
+                  Video
+                </h2>
+
+                {videoEmbedUrl ? (
+                  <div className="aspect-video w-full overflow-hidden rounded-2xl border border-gray-200 bg-black">
+                    <iframe
+                      src={videoEmbedUrl}
+                      title={`Video preview for ${item.title}`}
+                      className="h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-amber-700">
+                    This video URL could not be previewed, but it is still saved.
+                  </p>
+                )}
+
+                <a
+                  href={item.video_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 block break-all text-sm font-medium text-emerald-700 hover:text-emerald-800"
+                >
+                  Open video URL
                 </a>
               </section>
             ) : null}
