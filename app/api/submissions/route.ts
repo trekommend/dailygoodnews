@@ -138,6 +138,12 @@ const submissionSchema = z
       .url("Please enter a valid image URL.")
       .optional()
       .or(z.literal("")),
+    video_url: z
+      .string()
+      .trim()
+      .url("Please enter a valid YouTube or Vimeo URL.")
+      .optional()
+      .or(z.literal("")),
     category_slug: z.string().optional().or(z.literal("")),
     consent_original: z.boolean().optional(),
     consent_publication_rights: z.boolean().optional(),
@@ -163,6 +169,18 @@ const submissionSchema = z
         path: ["category_slug"],
         message: "Please choose a valid category.",
       });
+    }
+
+    if (data.video_url && data.video_url.trim().length > 0) {
+      const videoUrl = data.video_url.trim();
+
+      if (!isAllowedVideoUrl(videoUrl)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["video_url"],
+          message: "Only YouTube or Vimeo video links are allowed.",
+        });
+      }
     }
 
     if (data.submission_type === "original_story") {
@@ -199,8 +217,7 @@ const submissionSchema = z
           message: "Please provide the article URL.",
         });
       }
-
-      if (!data.consent_publication_rights) {
+            if (!data.consent_publication_rights) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["consent_publication_rights"],
@@ -315,6 +332,27 @@ function looksLikeArticleUrl(value: string) {
   }
 }
 
+function isAllowedVideoUrl(value: string) {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    const domain = url.hostname.toLowerCase().replace(/^www\./, "");
+
+    if (domain === "youtube.com" || domain === "youtu.be" || domain === "vimeo.com") {
+      return true;
+    }
+
+    if (domain.endsWith(".youtube.com") || domain.endsWith(".vimeo.com")) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function buildModerationNotes(parsed: z.infer<typeof submissionSchema>) {
   const notes: string[] = [];
 
@@ -324,6 +362,10 @@ function buildModerationNotes(parsed: z.infer<typeof submissionSchema>) {
 
   if (parsed.content && hasSpammyPatterns(parsed.content)) {
     notes.push("Spam-like pattern detected in content");
+  }
+
+  if (parsed.video_url && parsed.video_url.trim().length > 0) {
+    notes.push("Video link included");
   }
 
   if (
@@ -395,7 +437,7 @@ function inferPublicationNameFromUrl(url: string) {
     "espn.com": "ESPN",
     "washingtonpost.com": "Washington Post",
     "goodnewsnetwork.org": "Good News Network",
-    "positive.news": "Positive News",
+        "positive.news": "Positive News",
     "goodgoodgood.co": "Good Good Good",
     "foxnews.com": "Fox News",
     "nytimes.com": "New York Times",
@@ -589,7 +631,7 @@ async function checkGoogleSafeBrowsing(urlToCheck: string) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+                body: JSON.stringify({
           client: {
             clientId: "daily-good-news",
             clientVersion: "1.0.0",
@@ -678,7 +720,8 @@ export async function POST(req: Request) {
       parsed.title,
       parsed.summary,
       parsed.content,
-      parsed.author_bio
+      parsed.author_bio,
+      parsed.video_url
     );
 
     if (blockedTerm) {
@@ -735,6 +778,25 @@ export async function POST(req: Request) {
       );
     }
 
+    if (parsed.video_url && isBlockedDomain(parsed.video_url)) {
+      return NextResponse.json(
+        {
+          error:
+            "That video URL is not allowed. Please use a YouTube or Vimeo link.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (parsed.video_url && !isAllowedVideoUrl(parsed.video_url)) {
+      return NextResponse.json(
+        {
+          error: "Only YouTube or Vimeo video links are allowed.",
+        },
+        { status: 400 }
+      );
+    }
+
     if (parsed.source_url && isSuspiciousUrl(parsed.source_url)) {
       return NextResponse.json(
         {
@@ -750,6 +812,16 @@ export async function POST(req: Request) {
         {
           error:
             "That image URL could not be accepted. Please use an image from a trusted source.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (parsed.video_url && isSuspiciousUrl(parsed.video_url)) {
+      return NextResponse.json(
+        {
+          error:
+            "That video URL could not be accepted. Please use a YouTube or Vimeo link.",
         },
         { status: 400 }
       );
@@ -783,6 +855,20 @@ export async function POST(req: Request) {
       }
     }
 
+    if (parsed.video_url) {
+      const safeBrowsingVideoResult = await checkGoogleSafeBrowsing(parsed.video_url);
+
+      if (safeBrowsingVideoResult.matched) {
+        return NextResponse.json(
+          {
+            error:
+              "That video URL appears unsafe and cannot be accepted. Please use a different YouTube or Vimeo link.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -790,8 +876,7 @@ export async function POST(req: Request) {
 
     if (parsed.submission_type === "article_link" && parsed.source_url) {
       const cleanSourceUrl = parsed.source_url.trim();
-
-      const { data: existingSubmission, error: duplicateError } = await supabase
+            const { data: existingSubmission, error: duplicateError } = await supabase
         .from("reader_submissions")
         .select("id")
         .eq("source_url", cleanSourceUrl)
@@ -844,6 +929,7 @@ export async function POST(req: Request) {
     const cleanAuthorBio = parsed.author_bio?.trim() || null;
     const cleanLocationText = parsed.location_text?.trim() || null;
     let cleanImageUrlValue = parsed.image_url?.trim() || null;
+    const cleanVideoUrl = parsed.video_url?.trim() || null;
     const cleanCategorySlug =
       parsed.category_slug && allowedCategories.has(parsed.category_slug.trim().toLowerCase())
         ? parsed.category_slug.trim().toLowerCase()
@@ -908,6 +994,7 @@ export async function POST(req: Request) {
       author_bio: cleanAuthorBio,
       location_text: cleanLocationText,
       image_url: cleanImageUrlValue,
+      video_url: cleanVideoUrl,
       category_slug: cleanCategorySlug,
       consent_original: !!parsed.consent_original,
       consent_publication_rights: !!parsed.consent_publication_rights,
