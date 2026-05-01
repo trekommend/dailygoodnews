@@ -368,7 +368,7 @@ function extractImageCandidatesFromJsonLd(html: string, articleUrl: string): str
     const imageMatches = [
       ...jsonText.matchAll(/"image"\s*:\s*"([^"]+)"/gi),
       ...jsonText.matchAll(/"contentUrl"\s*:\s*"([^"]+)"/gi),
-      ...jsonText.matchAll(/"url"\s*:\s*"([^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi),
+      ...jsonText.matchAll(/"url"\s*:\s*"(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"/gi),
     ];
     for (const match of imageMatches) {
       const maybe = match[1]?.replace(/\\\//g, "/");
@@ -670,6 +670,7 @@ export async function POST(
       summary: finalSummary || null,
       content: finalContent || null,
       image_url: finalImageUrl,
+      video_url: submission.video_url || null,
       source_url: submission.source_url,
       source_name: finalSourceName,
       category_slug: categorySlug,
@@ -710,10 +711,12 @@ export async function POST(
       ? `submitter-selected category ${story.category_slug}`
       : `auto-detected category ${story.category_slug}`;
 
+    const videoNote = submission.video_url ? " with video" : "";
+
     const eventNotes =
       submission.submission_type === "original_story"
-        ? `Published as an original reader story in ${categorySource}`
-        : `Published as an article submission in ${categorySource}`;
+        ? `Published as an original reader story${videoNote} in ${categorySource}`
+        : `Published as an article submission${videoNote} in ${categorySource}`;
 
     const { error: eventError } = await supabase
       .from("reader_submission_events")
