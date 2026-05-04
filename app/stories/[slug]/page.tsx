@@ -12,6 +12,7 @@ type Story = {
   summary: string | null;
   content: string | null;
   image_url: string | null;
+  video_url: string | null;
   category_slug: string | null;
   source_url: string;
   source_name: string | null;
@@ -28,6 +29,48 @@ async function getStory(slug: string): Promise<Story | null> {
     .maybeSingle();
 
   return (data as Story | null) ?? null;
+}
+
+function getVideoEmbedUrl(value: string | null) {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      const videoId = url.searchParams.get("v");
+
+      if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}`;
+      }
+
+      const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
+      if (shortsMatch?.[1]) {
+        return `https://www.youtube.com/embed/${shortsMatch[1]}`;
+      }
+    }
+
+    if (host === "youtu.be") {
+      const videoId = url.pathname.split("/").filter(Boolean)[0];
+
+      if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}`;
+      }
+    }
+
+    if (host === "vimeo.com" || host.endsWith(".vimeo.com")) {
+      const videoId = url.pathname.split("/").filter(Boolean)[0];
+
+      if (videoId) {
+        return `https://player.vimeo.com/video/${videoId}`;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /* =========================
@@ -113,6 +156,8 @@ export default async function StoryPage({ params }: StoryPageProps) {
     ? story.image_url
     : `${siteUrl}/og-image.jpg`;
 
+  const videoEmbedUrl = getVideoEmbedUrl(story.video_url);
+
   const authorName =
     story.is_reader_submission && story.submitted_by_name
       ? story.submitted_by_name
@@ -169,6 +214,51 @@ export default async function StoryPage({ params }: StoryPageProps) {
             margin: "20px 0",
           }}
         />
+      )}
+
+      {story.video_url && (
+        <div style={{ margin: "24px 0" }}>
+          {videoEmbedUrl ? (
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                paddingTop: "56.25%",
+                borderRadius: 20,
+                overflow: "hidden",
+                background: "#000",
+              }}
+            >
+              <iframe
+                src={videoEmbedUrl}
+                title={`Video for ${story.title}`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  border: 0,
+                }}
+              />
+            </div>
+          ) : (
+            <a
+              href={story.video_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-block",
+                color: "#047857",
+                fontWeight: 700,
+                textDecoration: "underline",
+              }}
+            >
+              Watch the video
+            </a>
+          )}
+        </div>
       )}
 
       <div
