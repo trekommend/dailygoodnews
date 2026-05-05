@@ -7,6 +7,7 @@ type Story = {
   slug: string | null;
   summary: string | null;
   image_url: string | null;
+  video_url: string | null;
   category_slug: string | null;
   publish_date: string | null;
   created_at?: string | null;
@@ -59,11 +60,84 @@ function getFeaturedRank(story: Story) {
   return featuredBoost + score + freshness;
 }
 
+function getYouTubeThumbnailUrl(videoUrl?: string | null) {
+  if (!videoUrl) return null;
+
+  try {
+    const url = new URL(videoUrl);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      const videoId = url.searchParams.get("v");
+
+      if (videoId) {
+        return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+      }
+
+      const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
+      if (shortsMatch?.[1]) {
+        return `https://img.youtube.com/vi/${shortsMatch[1]}/hqdefault.jpg`;
+      }
+    }
+
+    if (host === "youtu.be") {
+      const videoId = url.pathname.split("/").filter(Boolean)[0];
+
+      if (videoId) {
+        return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function getCardImageUrl(story: Story) {
+  return story.image_url || getYouTubeThumbnailUrl(story.video_url);
+}
+
+function VideoFallbackPreview({ height }: { height: number | string }) {
+  return (
+    <div
+      style={{
+        width: "100%",
+        height,
+        background: "linear-gradient(135deg, #ecfdf5, #e0f2fe)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 42,
+        color: "#047857",
+        position: "relative",
+      }}
+    >
+      ▶
+      <span
+        style={{
+          position: "absolute",
+          right: 12,
+          bottom: 12,
+          borderRadius: 999,
+          background: "rgba(15, 23, 42, 0.8)",
+          color: "#ffffff",
+          fontSize: 12,
+          fontWeight: 700,
+          padding: "5px 9px",
+        }}
+      >
+        Video
+      </span>
+    </div>
+  );
+}
+
 export default async function HomePage() {
   const { data, error } = await supabase
     .from("stories")
     .select(
-      "id, title, slug, summary, image_url, category_slug, publish_date, created_at, featured, story_score, source_url"
+      "id, title, slug, summary, image_url, video_url, category_slug, publish_date, created_at, featured, story_score, source_url"
     )
     .not("slug", "is", null)
     .order("publish_date", { ascending: false })
@@ -98,6 +172,8 @@ export default async function HomePage() {
         )[0]
       : [...stories].sort((a, b) => getFeaturedRank(b) - getFeaturedRank(a))[0]);
 
+  const featuredImageUrl = getCardImageUrl(featuredStory);
+
   const latestStories = [...stories]
     .filter((story) => story.id !== featuredStory.id)
     .sort((a, b) => {
@@ -124,17 +200,38 @@ export default async function HomePage() {
           marginBottom: "clamp(24px, 6vw, 40px)",
         }}
       >
-        {featuredStory.image_url ? (
-          <img
-            src={featuredStory.image_url}
-            alt={featuredStory.title}
-            style={{
-              width: "100%",
-              height: "clamp(220px, 40vw, 420px)",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
+        {featuredImageUrl ? (
+          <div style={{ position: "relative" }}>
+            <img
+              src={featuredImageUrl}
+              alt={featuredStory.title}
+              style={{
+                width: "100%",
+                height: "clamp(220px, 40vw, 420px)",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+            {featuredStory.video_url ? (
+              <span
+                style={{
+                  position: "absolute",
+                  right: 16,
+                  bottom: 16,
+                  borderRadius: 999,
+                  background: "rgba(15, 23, 42, 0.82)",
+                  color: "#ffffff",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  padding: "7px 11px",
+                }}
+              >
+                ▶ Video
+              </span>
+            ) : null}
+          </div>
+        ) : featuredStory.video_url ? (
+          <VideoFallbackPreview height="clamp(220px, 40vw, 420px)" />
         ) : null}
 
         <div style={{ padding: 24 }}>
@@ -153,6 +250,7 @@ export default async function HomePage() {
             }}
           >
             Featured • {formatCategory(featuredStory.category_slug)}
+            {featuredStory.video_url ? " • Video" : ""}
           </div>
 
           <h1
@@ -237,101 +335,127 @@ export default async function HomePage() {
             gap: 20,
           }}
         >
-          {latestStories.map((story) => (
-            <article
-              key={story.id}
-              style={{
-                background: "#ffffff",
-                border: "1px solid #e5e7eb",
-                borderRadius: 20,
-                overflow: "hidden",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-              }}
-            >
-              {story.image_url ? (
-                <img
-                  src={story.image_url}
-                  alt={story.title}
-                  style={{
-                    width: "100%",
-                    height: 180,
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: "100%",
-                    height: 180,
-                    background: "#f1f5f9",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 32,
-                  }}
-                >
-                  🌤️
-                </div>
-              )}
+          {latestStories.map((story) => {
+            const cardImageUrl = getCardImageUrl(story);
 
-              <div style={{ padding: 18 }}>
-                <div
-                  style={{
-                    marginBottom: 10,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    color: "#059669",
-                  }}
-                >
-                  {formatCategory(story.category_slug)}
-                </div>
-
-                <h3
-                  style={{
-                    margin: "0 0 10px 0",
-                    fontSize: 20,
-                    lineHeight: 1.25,
-                  }}
-                >
-                  <Link href={`/stories/${story.slug}`}>{story.title}</Link>
-                </h3>
-
-                {story.summary ? (
-                  <p
+            return (
+              <article
+                key={story.id}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 20,
+                  overflow: "hidden",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                }}
+              >
+                {cardImageUrl ? (
+                  <div style={{ position: "relative" }}>
+                    <img
+                      src={cardImageUrl}
+                      alt={story.title}
+                      style={{
+                        width: "100%",
+                        height: 180,
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                    {story.video_url ? (
+                      <span
+                        style={{
+                          position: "absolute",
+                          right: 10,
+                          bottom: 10,
+                          borderRadius: 999,
+                          background: "rgba(15, 23, 42, 0.82)",
+                          color: "#ffffff",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          padding: "5px 9px",
+                        }}
+                      >
+                        ▶ Video
+                      </span>
+                    ) : null}
+                  </div>
+                ) : story.video_url ? (
+                  <VideoFallbackPreview height={180} />
+                ) : (
+                  <div
                     style={{
-                      margin: "0 0 14px 0",
-                      color: "#4b5563",
-                      fontSize: 15,
+                      width: "100%",
+                      height: 180,
+                      background: "#f1f5f9",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 32,
                     }}
                   >
-                    {story.summary}
-                  </p>
-                ) : null}
+                    🌤️
+                  </div>
+                )}
 
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    fontSize: 13,
-                    color: "#6b7280",
-                  }}
-                >
-                  <span>{formatDate(story.publish_date)}</span>
-                  <Link
-                    href={`/stories/${story.slug}`}
-                    style={{ color: "#047857", fontWeight: 600 }}
+                <div style={{ padding: 18 }}>
+                  <div
+                    style={{
+                      marginBottom: 10,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      color: "#059669",
+                    }}
                   >
-                    Read more
-                  </Link>
+                    {formatCategory(story.category_slug)}
+                    {story.video_url ? " • Video" : ""}
+                  </div>
+
+                  <h3
+                    style={{
+                      margin: "0 0 10px 0",
+                      fontSize: 20,
+                      lineHeight: 1.25,
+                    }}
+                  >
+                    <Link href={`/stories/${story.slug}`}>{story.title}</Link>
+                  </h3>
+
+                  {story.summary ? (
+                    <p
+                      style={{
+                        margin: "0 0 14px 0",
+                        color: "#4b5563",
+                        fontSize: 15,
+                      }}
+                    >
+                      {story.summary}
+                    </p>
+                  ) : null}
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      fontSize: 13,
+                      color: "#6b7280",
+                    }}
+                  >
+                    <span>{formatDate(story.publish_date)}</span>
+                    <Link
+                      href={`/stories/${story.slug}`}
+                      style={{ color: "#047857", fontWeight: 600 }}
+                    >
+                      {story.video_url ? "Watch / read" : "Read more"}
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </section>
     </main>
