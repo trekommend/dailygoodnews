@@ -14,7 +14,9 @@ function formatDate(dateString?: string | null) {
   });
 }
 
-function formatCategoryName(slug: string) {
+function formatCategoryName(slug?: string | null) {
+  if (!slug) return "Category";
+
   return slug
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -28,9 +30,9 @@ function formatCategoryName(slug: string) {
 export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const { slug } = params;
+  const { slug } = await params;
 
   const categoryName = formatCategoryName(slug);
   const siteUrl =
@@ -68,9 +70,9 @@ export async function generateMetadata({
 export default async function CategoryPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
-  const { slug } = params;
+  const { slug } = await params;
 
   const { data } = await supabase
     .from("stories")
@@ -162,7 +164,7 @@ export default async function CategoryPage({
                   margin: "0 0 12px 0",
                 }}
               >
-                {(story.summary || story.content)?.slice(0, 100)}...
+                {(story.summary || story.content || "").slice(0, 100)}...
               </p>
 
               <div
