@@ -15,6 +15,7 @@ type FormState = {
   author_bio: string;
   location_text: string;
   image_url: string;
+  video_url: string;
   category_slug: string;
   consent_original: boolean;
   consent_publication_rights: boolean;
@@ -47,6 +48,7 @@ const initialFormState: FormState = {
   author_bio: "",
   location_text: "",
   image_url: "",
+  video_url: "",
   category_slug: "",
   consent_original: false,
   consent_publication_rights: false,
@@ -673,6 +675,39 @@ export default function SubmitPage() {
                   }}
                 />
                 <FieldError message={fieldErrors.image_url} />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="video_url"
+                  style={{
+                    display: "block",
+                    marginBottom: 8,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#111827",
+                  }}
+                >
+                  Video URL (optional)
+                </label>
+                <input
+                  id="video_url"
+                  type="url"
+                  value={form.video_url}
+                  onChange={(e) => updateField("video_url", e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  style={{
+                    width: "100%",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 16,
+                    padding: "14px 16px",
+                    fontSize: 15,
+                  }}
+                />
+                <p style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+                  Optional. YouTube and Vimeo links only.
+                </p>
+                <FieldError message={fieldErrors.video_url} />
               </div>
             </div>
           </section>
