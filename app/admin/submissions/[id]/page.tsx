@@ -19,6 +19,7 @@ type SubmissionDetail = {
   location_text: string | null;
   image_url: string | null;
   video_url: string | null;
+  category_slug: string | null;
   moderation_notes: string | null;
   rejection_reason: string | null;
   submitted_at: string;
@@ -50,6 +51,15 @@ function formatStatus(status: SubmissionDetail["status"]) {
     default:
       return status;
   }
+}
+
+function formatCategory(value: string | null) {
+  if (!value) return "—";
+
+  return value
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function formatDate(value: string | null) {
@@ -152,6 +162,7 @@ export default async function SubmissionDetailPage({
       location_text,
       image_url,
       video_url,
+      category_slug,
       moderation_notes,
       rejection_reason,
       submitted_at,
@@ -195,6 +206,11 @@ export default async function SubmissionDetailPage({
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
               {formatStatus(item.status)}
             </span>
+            {item.category_slug ? (
+              <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
+                {formatCategory(item.category_slug)}
+              </span>
+            ) : null}
             {item.video_url ? (
               <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
                 Video included
@@ -228,6 +244,10 @@ export default async function SubmissionDetailPage({
             <div>
               <span className="font-semibold text-gray-900">Slug:</span>{" "}
               {item.slug || "—"}
+            </div>
+            <div>
+              <span className="font-semibold text-gray-900">Category:</span>{" "}
+              {formatCategory(item.category_slug)}
             </div>
             <div>
               <span className="font-semibold text-gray-900">Location:</span>{" "}

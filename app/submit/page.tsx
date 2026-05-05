@@ -74,7 +74,6 @@ export default function SubmitPage() {
 
   const titleCount = form.title.trim().length;
   const summaryCount = form.summary.length;
-  const contentCount = form.content.length;
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({
@@ -85,6 +84,11 @@ export default function SubmitPage() {
     setFieldErrors((prev) => {
       const next = { ...prev };
       delete next[key];
+
+      if (key === "summary") {
+        delete next.content;
+      }
+
       return next;
     });
 
@@ -112,7 +116,7 @@ export default function SubmitPage() {
     for (const issue of issues) {
       const key = issue.path?.[0];
       if (key && issue.message) {
-        nextErrors[key] = issue.message;
+        nextErrors[key === "content" ? "summary" : key] = issue.message;
       }
     }
 
@@ -131,6 +135,10 @@ export default function SubmitPage() {
       const payload = {
         submission_type: submissionType,
         ...form,
+        content:
+          submissionType === "original_story"
+            ? form.summary
+            : form.content,
       };
 
       const response = await fetch("/api/submissions", {
@@ -301,7 +309,8 @@ export default function SubmitPage() {
                   color: "#4b5563",
                 }}
               >
-                Share an original story in your own words.
+                Share an original story in your own words, with an optional
+                video or image.
               </div>
             </div>
           </label>
@@ -507,7 +516,7 @@ export default function SubmitPage() {
                         htmlFor="summary"
                         style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}
                       >
-                        Short description
+                        Description
                       </label>
                       <span style={{ fontSize: 12, color: "#9ca3af" }}>
                         {summaryCount}/500
@@ -515,10 +524,10 @@ export default function SubmitPage() {
                     </div>
                     <textarea
                       id="summary"
-                      rows={4}
+                      rows={6}
                       value={form.summary}
                       onChange={(e) => updateField("summary", e.target.value)}
-                      placeholder="Give a short summary of your story."
+                      placeholder="Describe your story. Include what happened, who was involved, and why it mattered."
                       style={{
                         width: "100%",
                         border: "1px solid #d1d5db",
@@ -528,6 +537,9 @@ export default function SubmitPage() {
                         resize: "vertical",
                       }}
                     />
+                    <p style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+                      Aim for at least 100 characters.
+                    </p>
                     <FieldError message={fieldErrors.summary} />
                   </div>
                 </>
@@ -568,53 +580,7 @@ export default function SubmitPage() {
                 <FieldError message={fieldErrors.category_slug} />
               </div>
 
-              {submissionType === "original_story" ? (
-                <div>
-                  <div
-                    style={{
-                      marginBottom: 8,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 16,
-                    }}
-                  >
-                    <label
-                      htmlFor="content"
-                      style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}
-                    >
-                      Full story
-                    </label>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: contentCount < 100 ? "#d97706" : "#9ca3af",
-                      }}
-                    >
-                      {contentCount} characters
-                    </span>
-                  </div>
-                  <textarea
-                    id="content"
-                    rows={14}
-                    value={form.content}
-                    onChange={(e) => updateField("content", e.target.value)}
-                    placeholder="Write your full story here. Include what happened, who was involved, and why it mattered."
-                    style={{
-                      width: "100%",
-                      border: "1px solid #d1d5db",
-                      borderRadius: 16,
-                      padding: "14px 16px",
-                      fontSize: 15,
-                      resize: "vertical",
-                    }}
-                  />
-                  <p style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
-                    Aim for at least 100 characters.
-                  </p>
-                  <FieldError message={fieldErrors.content} />
-                </div>
-              ) : (
+              {submissionType === "article_link" ? (
                 <div>
                   <label
                     htmlFor="content"
@@ -645,7 +611,7 @@ export default function SubmitPage() {
                   />
                   <FieldError message={fieldErrors.content} />
                 </div>
-              )}
+              ) : null}
 
               <div>
                 <label
@@ -705,7 +671,7 @@ export default function SubmitPage() {
                   }}
                 />
                 <p style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
-                  Optional. YouTube and Vimeo links only.
+                  YouTube and Vimeo links supported
                 </p>
                 <FieldError message={fieldErrors.video_url} />
               </div>
