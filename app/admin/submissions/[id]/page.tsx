@@ -20,11 +20,18 @@ type SubmissionDetail = {
   image_url: string | null;
   video_url: string | null;
   category_slug: string | null;
+  linked_story_id: string | null;
   moderation_notes: string | null;
   rejection_reason: string | null;
   submitted_at: string;
   reviewed_at: string | null;
   published_at: string | null;
+};
+
+type LinkedStory = {
+  id: string;
+  slug: string | null;
+  category_slug: string | null;
 };
 
 type EventRow = {
@@ -54,7 +61,7 @@ function formatStatus(status: SubmissionDetail["status"]) {
 }
 
 function formatCategory(value: string | null) {
-  if (!value) return "—";
+  if (!value) return "Auto-select on publish";
 
   return value
     .split("-")
@@ -163,6 +170,7 @@ export default async function SubmissionDetailPage({
       image_url,
       video_url,
       category_slug,
+      linked_story_id,
       moderation_notes,
       rejection_reason,
       submitted_at,
@@ -176,15 +184,29 @@ export default async function SubmissionDetailPage({
     notFound();
   }
 
+  const item = submission as SubmissionDetail;
+
+  let linkedStory: LinkedStory | null = null;
+
+  if (item.linked_story_id) {
+    const { data: linkedStoryData } = await supabase
+      .from("stories")
+      .select("id, slug, category_slug")
+      .eq("id", item.linked_story_id)
+      .maybeSingle();
+
+    linkedStory = (linkedStoryData as LinkedStory | null) ?? null;
+  }
+
   const { data: events } = await supabase
     .from("reader_submission_events")
     .select("id, event_type, notes, created_at")
     .eq("submission_id", id)
     .order("created_at", { ascending: false });
 
-  const item = submission as SubmissionDetail;
   const history = (events || []) as EventRow[];
   const videoEmbedUrl = getVideoEmbedUrl(item.video_url);
+  const displayCategorySlug = item.category_slug || linkedStory?.category_slug || null;
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-8">
@@ -206,11 +228,9 @@ export default async function SubmissionDetailPage({
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
               {formatStatus(item.status)}
             </span>
-            {item.category_slug ? (
-              <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
-                {formatCategory(item.category_slug)}
-              </span>
-            ) : null}
+            <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
+              {formatCategory(displayCategorySlug)}
+            </span>
             {item.video_url ? (
               <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
                 Video included
@@ -247,7 +267,7 @@ export default async function SubmissionDetailPage({
             </div>
             <div>
               <span className="font-semibold text-gray-900">Category:</span>{" "}
-              {formatCategory(item.category_slug)}
+              {formatCategory(displayCategorySlug)}
             </div>
             <div>
               <span className="font-semibold text-gray-900">Location:</span>{" "}

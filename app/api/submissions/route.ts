@@ -217,7 +217,8 @@ const submissionSchema = z
           message: "Please provide the article URL.",
         });
       }
-            if (!data.consent_publication_rights) {
+
+      if (!data.consent_publication_rights) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["consent_publication_rights"],
@@ -353,6 +354,73 @@ function isAllowedVideoUrl(value: string) {
   }
 }
 
+function detectCategory(
+  submissionType: "original_story" | "article_link",
+  title: string | null | undefined,
+  summary: string | null | undefined,
+  content: string | null | undefined,
+  sourceName: string | null | undefined
+) {
+  const haystack = [title || "", summary || "", content || "", sourceName || ""]
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    haystack.includes("dog") ||
+    haystack.includes("cat") ||
+    haystack.includes("animal") ||
+    haystack.includes("wildlife") ||
+    haystack.includes("bird") ||
+    haystack.includes("pet") ||
+    haystack.includes("rescue")
+  ) {
+    return "animals";
+  }
+
+  if (
+    haystack.includes("health") ||
+    haystack.includes("hospital") ||
+    haystack.includes("doctor") ||
+    haystack.includes("nurse") ||
+    haystack.includes("medical") ||
+    haystack.includes("therapy") ||
+    haystack.includes("mental health") ||
+    haystack.includes("wellness")
+  ) {
+    return "health";
+  }
+
+  if (
+    haystack.includes("kindness") ||
+    haystack.includes("generosity") ||
+    haystack.includes("donation") ||
+    haystack.includes("volunteer") ||
+    haystack.includes("helped") ||
+    haystack.includes("helping") ||
+    haystack.includes("gift") ||
+    haystack.includes("support")
+  ) {
+    return "kindness";
+  }
+
+  if (
+    haystack.includes("community") ||
+    haystack.includes("neighborhood") ||
+    haystack.includes("school") ||
+    haystack.includes("town") ||
+    haystack.includes("city") ||
+    haystack.includes("library") ||
+    haystack.includes("students") ||
+    haystack.includes("families")
+  ) {
+    return "community";
+  }
+
+  if (submissionType === "original_story") return "community";
+
+  return "hope";
+}
+
 function buildModerationNotes(parsed: z.infer<typeof submissionSchema>) {
   const notes: string[] = [];
 
@@ -437,7 +505,7 @@ function inferPublicationNameFromUrl(url: string) {
     "espn.com": "ESPN",
     "washingtonpost.com": "Washington Post",
     "goodnewsnetwork.org": "Good News Network",
-        "positive.news": "Positive News",
+    "positive.news": "Positive News",
     "goodgoodgood.co": "Good Good Good",
     "foxnews.com": "Fox News",
     "nytimes.com": "New York Times",
@@ -631,7 +699,7 @@ async function checkGoogleSafeBrowsing(urlToCheck: string) {
         headers: {
           "Content-Type": "application/json",
         },
-                body: JSON.stringify({
+        body: JSON.stringify({
           client: {
             clientId: "daily-good-news",
             clientVersion: "1.0.0",
@@ -681,9 +749,6 @@ async function checkGoogleSafeBrowsing(urlToCheck: string) {
 }
 
 export async function POST(req: Request) {
-  // ============================================
-  // RATE LIMITING — must be first check
-  // ============================================
   const forwarded = req.headers.get("x-forwarded-for");
   const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";
 
@@ -876,7 +941,8 @@ export async function POST(req: Request) {
 
     if (parsed.submission_type === "article_link" && parsed.source_url) {
       const cleanSourceUrl = parsed.source_url.trim();
-            const { data: existingSubmission, error: duplicateError } = await supabase
+
+      const { data: existingSubmission, error: duplicateError } = await supabase
         .from("reader_submissions")
         .select("id")
         .eq("source_url", cleanSourceUrl)
@@ -930,10 +996,6 @@ export async function POST(req: Request) {
     const cleanLocationText = parsed.location_text?.trim() || null;
     let cleanImageUrlValue = parsed.image_url?.trim() || null;
     const cleanVideoUrl = parsed.video_url?.trim() || null;
-    const cleanCategorySlug =
-      parsed.category_slug && allowedCategories.has(parsed.category_slug.trim().toLowerCase())
-        ? parsed.category_slug.trim().toLowerCase()
-        : null;
 
     if (parsed.submission_type === "article_link" && cleanSourceUrl) {
       const preview = await extractArticlePreview(cleanSourceUrl);
@@ -947,6 +1009,17 @@ export async function POST(req: Request) {
     if (parsed.submission_type === "original_story") {
       cleanTitle = cleanTitle.trim();
     }
+
+    const cleanCategorySlug =
+      parsed.category_slug && allowedCategories.has(parsed.category_slug.trim().toLowerCase())
+        ? parsed.category_slug.trim().toLowerCase()
+        : detectCategory(
+            parsed.submission_type,
+            cleanTitle,
+            cleanSummary,
+            cleanContent,
+            cleanSourceName
+          );
 
     const slug = slugify(cleanTitle || "submitted-article");
 
@@ -1022,7 +1095,7 @@ export async function POST(req: Request) {
         : "Article link submission created";
 
     const categoryNote = cleanCategorySlug
-      ? ` | Category selected: ${cleanCategorySlug}`
+      ? ` | Category assigned: ${cleanCategorySlug}`
       : "";
 
     const combinedEventNote = moderationNotes
