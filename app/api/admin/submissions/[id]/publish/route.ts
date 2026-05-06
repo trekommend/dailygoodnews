@@ -272,7 +272,10 @@ function guessTitleFromUrl(url: string) {
 
 function normalizeExtractedTitle(title: string) {
   const cleaned = decodeHtmlEntities(title)
-    .replace(/\s*[-|–—]\s*(ESPN|Washington Post|Good News Network|Positive News|Good Good Good|Fox News|CNN|BBC|Reuters|AP News|NPR|New York Times|The Guardian)\s*$/i, "")
+    .replace(
+      /\s*[-|–—]\s*(ESPN|Washington Post|Good News Network|Positive News|Good Good Good|Fox News|CNN|BBC|Reuters|AP News|NPR|New York Times|The Guardian)\s*$/i,
+      ""
+    )
     .trim();
   return cleaned || title.trim();
 }
@@ -523,7 +526,6 @@ export async function POST(
   try {
     const { id } = await params;
 
-    // Auth check — uses cookie-aware client
     const authClient = await createClient();
     const {
       data: { user },
@@ -544,7 +546,6 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // All DB operations — uses service role client
     const supabase = createAdminClient();
 
     const { data: submission, error: submissionError } = await supabase
@@ -563,12 +564,31 @@ export async function POST(
     }
 
     if (submission.status === "published" && submission.linked_story_id) {
-      return NextResponse.json({ success: true, message: "Submission already published", story_id: submission.linked_story_id });
+      const { data: linkedStory } = await supabase
+        .from("stories")
+        .select("id, slug, category_slug")
+        .eq("id", submission.linked_story_id)
+        .maybeSingle();
+
+      if (linkedStory?.category_slug && !submission.category_slug) {
+        await supabase
+          .from("reader_submissions")
+          .update({ category_slug: linkedStory.category_slug })
+          .eq("id", id);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Submission already published",
+        story_id: submission.linked_story_id,
+        slug: linkedStory?.slug,
+        category_slug: linkedStory?.category_slug,
+      });
     }
 
     const { data: existingBySubmission, error: existingBySubmissionError } = await supabase
       .from("stories")
-      .select("id, slug")
+      .select("id, slug, category_slug")
       .eq("submission_id", submission.id)
       .limit(1);
 
@@ -579,24 +599,35 @@ export async function POST(
 
     if (existingBySubmission && existingBySubmission.length > 0) {
       const existingStory = existingBySubmission[0];
+      const now = new Date().toISOString();
+
       const { error: relinkError } = await supabase
         .from("reader_submissions")
         .update({
           status: "published",
           linked_story_id: existingStory.id,
-          published_at: submission.published_at || new Date().toISOString(),
+          published_at: submission.published_at || now,
           reviewed_by: user.id,
-          reviewed_at: new Date().toISOString(),
+          reviewed_at: now,
+          category_slug: existingStory.category_slug || submission.category_slug || null,
         })
         .eq("id", id);
+
       if (relinkError) return NextResponse.json({ error: relinkError.message }, { status: 500 });
-      return NextResponse.json({ success: true, message: "Submission was already linked to an existing story.", story_id: existingStory.id, slug: existingStory.slug });
+
+      return NextResponse.json({
+        success: true,
+        message: "Submission was already linked to an existing story.",
+        story_id: existingStory.id,
+        slug: existingStory.slug,
+        category_slug: existingStory.category_slug,
+      });
     }
 
     if (submission.source_url) {
       const { data: existingBySourceUrl, error: existingBySourceUrlError } = await supabase
         .from("stories")
-        .select("id, slug")
+        .select("id, slug, category_slug")
         .eq("source_url", submission.source_url)
         .limit(1);
 
@@ -607,24 +638,36 @@ export async function POST(
 
       if (existingBySourceUrl && existingBySourceUrl.length > 0) {
         const existingStory = existingBySourceUrl[0];
+        const now = new Date().toISOString();
+
         const { error: updateMatchedError } = await supabase
           .from("reader_submissions")
           .update({
             status: "published",
             linked_story_id: existingStory.id,
-            published_at: submission.published_at || new Date().toISOString(),
+            published_at: submission.published_at || now,
             reviewed_by: user.id,
-            reviewed_at: new Date().toISOString(),
+            reviewed_at: now,
+            category_slug: existingStory.category_slug || submission.category_slug || null,
           })
           .eq("id", id);
+
         if (updateMatchedError) return NextResponse.json({ error: updateMatchedError.message }, { status: 500 });
+
         await supabase.from("reader_submission_events").insert({
           submission_id: id,
           event_type: "linked_to_existing_story",
           actor_user_id: user.id,
           notes: `Matched existing story by source_url (${existingStory.slug || existingStory.id})`,
         });
-        return NextResponse.json({ success: true, message: "Matched to an existing story by source URL.", story_id: existingStory.id, slug: existingStory.slug });
+
+        return NextResponse.json({
+          success: true,
+          message: "Matched to an existing story by source URL.",
+          story_id: existingStory.id,
+          slug: existingStory.slug,
+          category_slug: existingStory.category_slug,
+        });
       }
     }
 
@@ -658,9 +701,13 @@ export async function POST(
 
     const finalImageUrl = submission.image_url || extractedArticleData.imageUrl || null;
 
-    const categorySlug =
-      submission.category_slug ||
-      detectCategory(submission.submission_type, finalTitle, finalSummary, finalContent, finalSourceName);
+    const categorySlug = detectCategory(
+      submission.submission_type,
+      finalTitle,
+      finalSummary,
+      finalContent,
+      finalSourceName
+    );
 
     const publishDate = new Date().toISOString();
 
@@ -699,6 +746,7 @@ export async function POST(
         reviewed_by: user.id,
         reviewed_at: publishDate,
         linked_story_id: story.id,
+        category_slug: story.category_slug,
       })
       .eq("id", id);
 
@@ -729,7 +777,12 @@ export async function POST(
 
     if (eventError) console.error("Publish event error:", eventError);
 
-    return NextResponse.json({ success: true, story_id: story.id, slug: story.slug, category_slug: story.category_slug });
+    return NextResponse.json({
+      success: true,
+      story_id: story.id,
+      slug: story.slug,
+      category_slug: story.category_slug,
+    });
   } catch (error) {
     console.error("Publish route error:", error);
     return NextResponse.json(
