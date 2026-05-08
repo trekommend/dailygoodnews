@@ -146,7 +146,7 @@ export default async function HomePage() {
   if (error) {
     return (
       <main style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 16px" }}>
-        <h1>Daily Good News</h1>
+        <h1>Positive News That Inspires</h1>
         <p>We couldn’t load stories right now.</p>
       </main>
     );
@@ -157,7 +157,7 @@ export default async function HomePage() {
   if (stories.length === 0) {
     return (
       <main style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 16px" }}>
-        <h1>Daily Good News</h1>
+        <h1>Positive News That Inspires</h1>
         <p>No stories published yet.</p>
       </main>
     );
@@ -166,11 +166,11 @@ export default async function HomePage() {
   const recentHeroCandidates = stories.filter((story) => getAgeHours(story) <= 72);
 
   const featuredStory =
-    (recentHeroCandidates.length > 0
+    recentHeroCandidates.length > 0
       ? [...recentHeroCandidates].sort(
           (a, b) => getFeaturedRank(b) - getFeaturedRank(a)
         )[0]
-      : [...stories].sort((a, b) => getFeaturedRank(b) - getFeaturedRank(a))[0]);
+      : [...stories].sort((a, b) => getFeaturedRank(b) - getFeaturedRank(a))[0];
 
   const featuredImageUrl = getCardImageUrl(featuredStory);
 
@@ -190,6 +190,58 @@ export default async function HomePage() {
 
   return (
     <main style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 16px" }}>
+      <section style={{ marginBottom: 28 }}>
+        <h1
+          style={{
+            margin: "0 0 10px 0",
+            fontSize: "clamp(32px, 6vw, 52px)",
+            lineHeight: 1.05,
+          }}
+        >
+          Positive News That Inspires
+        </h1>
+
+        <p
+          style={{
+            margin: 0,
+            maxWidth: 760,
+            color: "#4b5563",
+            fontSize: 18,
+            lineHeight: 1.7,
+          }}
+        >
+          Discover uplifting stories, inspiring moments, and positive news from
+          around the world. From acts of kindness to breakthroughs in health,
+          animals, community, and hope, we highlight the good in us.
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            flexWrap: "wrap",
+            marginTop: 16,
+            fontSize: 14,
+          }}
+        >
+          <Link href="/category/kindness" style={{ color: "#047857", fontWeight: 600 }}>
+            Kindness
+          </Link>
+          <Link href="/category/community" style={{ color: "#047857", fontWeight: 600 }}>
+            Community
+          </Link>
+          <Link href="/category/animals" style={{ color: "#047857", fontWeight: 600 }}>
+            Animals
+          </Link>
+          <Link href="/category/health" style={{ color: "#047857", fontWeight: 600 }}>
+            Health
+          </Link>
+          <Link href="/category/hope" style={{ color: "#047857", fontWeight: 600 }}>
+            Hope
+          </Link>
+        </div>
+      </section>
+
       <section
         style={{
           background: "#ffffff",
@@ -253,7 +305,7 @@ export default async function HomePage() {
             {featuredStory.video_url ? " • Video" : ""}
           </div>
 
-          <h1
+          <h2
             style={{
               margin: "0 0 12px 0",
               fontSize: 36,
@@ -263,7 +315,7 @@ export default async function HomePage() {
             <Link href={`/stories/${featuredStory.slug}`}>
               {featuredStory.title}
             </Link>
-          </h1>
+          </h2>
 
           {featuredStory.summary ? (
             <p
