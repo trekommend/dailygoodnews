@@ -1,6 +1,10 @@
 import Parser from "rss-parser";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const maxDuration = 60;
+
 const supabase = createAdminClient();
 
 type FeedItem = {
