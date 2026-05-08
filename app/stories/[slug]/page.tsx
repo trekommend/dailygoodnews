@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 import type { Metadata } from "next";
 
 type StoryPageProps = {
@@ -12,13 +13,19 @@ type Story = {
   summary: string | null;
   content: string | null;
   image_url: string | null;
-  video_url: string | null;
+  video_url?: string | null;
   category_slug: string | null;
   source_url: string;
   source_name: string | null;
   publish_date: string | null;
   is_reader_submission?: boolean | null;
   submitted_by_name?: string | null;
+};
+
+type RelatedStory = {
+  id: string;
+  title: string;
+  slug: string;
 };
 
 async function getStory(slug: string): Promise<Story | null> {
@@ -31,7 +38,58 @@ async function getStory(slug: string): Promise<Story | null> {
   return (data as Story | null) ?? null;
 }
 
-function getVideoEmbedUrl(value: string | null) {
+function cleanTextForMeta(text: string) {
+  return text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function truncateForMeta(text: string, maxLength = 160) {
+  if (text.length <= maxLength) return text;
+
+  const sliced = text.slice(0, maxLength);
+  const lastSentenceEnd = Math.max(
+    sliced.lastIndexOf(". "),
+    sliced.lastIndexOf("! "),
+    sliced.lastIndexOf("? ")
+  );
+
+  if (lastSentenceEnd > 80) {
+    return `${sliced.slice(0, lastSentenceEnd + 1).trim()}...`;
+  }
+
+  const lastSpace = sliced.lastIndexOf(" ");
+  if (lastSpace > 80) {
+    return `${sliced.slice(0, lastSpace).trim()}...`;
+  }
+
+  return `${sliced.trim()}...`;
+}
+
+function formatReadableDate(dateString: string | null) {
+  if (!dateString) return null;
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatCategoryName(slug: string | null) {
+  if (!slug) return "Hope";
+
+  return slug
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function getVideoEmbedUrl(value: string | null | undefined) {
   if (!value) return null;
 
   try {
@@ -73,18 +131,13 @@ function getVideoEmbedUrl(value: string | null) {
   }
 }
 
-/* =========================
-   METADATA
-========================= */
-
 export async function generateMetadata({
   params,
 }: StoryPageProps): Promise<Metadata> {
   const { slug } = await params;
   const story = await getStory(slug);
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
 
   if (!story) {
     return {
@@ -93,23 +146,15 @@ export async function generateMetadata({
     };
   }
 
-  const cleanText = (story.summary ?? story.content ?? "")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
+  const cleanText = cleanTextForMeta(story.summary ?? story.content ?? "");
   const description =
-    cleanText.slice(0, 160) ||
-    "A positive news story from Daily Good News.";
+    truncateForMeta(cleanText) || "A positive news story from Daily Good News.";
 
   const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
-
-  const ogImage = story.image_url
-    ? story.image_url
-    : `${siteUrl}/og-image.jpg`;
+  const ogImage = story.image_url ? story.image_url : `${siteUrl}/og-image.jpg`;
 
   return {
-    title: `${story.title} | Daily Good News`,
+    title: `${story.title} – Positive News | Daily Good News`,
     description,
     alternates: {
       canonical: canonicalUrl,
@@ -132,30 +177,25 @@ export async function generateMetadata({
   };
 }
 
-/* =========================
-   PAGE
-========================= */
-
 export default async function StoryPage({ params }: StoryPageProps) {
   const { slug } = await params;
   const story = await getStory(slug);
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
 
   if (!story) {
     return (
       <article style={{ maxWidth: 760, margin: "0 auto", padding: 40 }}>
         <h1>Story not found.</h1>
+        <p>We couldn’t find that article.</p>
       </article>
     );
   }
 
   const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
-  const imageUrl = story.image_url
-    ? story.image_url
-    : `${siteUrl}/og-image.jpg`;
-
+  const imageUrl = story.image_url ? story.image_url : `${siteUrl}/og-image.jpg`;
+  const formattedDate = formatReadableDate(story.publish_date);
+  const categoryName = formatCategoryName(story.category_slug);
   const videoEmbedUrl = getVideoEmbedUrl(story.video_url);
 
   const authorName =
@@ -163,14 +203,27 @@ export default async function StoryPage({ params }: StoryPageProps) {
       ? story.submitted_by_name
       : "Daily Good News";
 
-  /* =========================
-     STRUCTURED DATA
-  ========================= */
+  const cleanSummary = cleanTextForMeta(story.summary ?? "");
+  const cleanContent = cleanTextForMeta(story.content ?? "");
+  const description =
+    truncateForMeta(cleanSummary || cleanContent) ||
+    "A positive news story from Daily Good News.";
 
-  const structuredData = {
+  const { data: relatedStories } = await supabase
+    .from("stories")
+    .select("id, title, slug")
+    .not("slug", "is", null)
+    .neq("slug", story.slug)
+    .order("publish_date", { ascending: false })
+    .limit(4);
+
+  const related = (relatedStories || []) as RelatedStory[];
+
+  const articleStructuredData = {
     "@context": "https://schema.org",
     "@type": "Article",
     headline: story.title,
+    description,
     image: [imageUrl],
     datePublished: story.publish_date,
     author: {
@@ -191,18 +244,92 @@ export default async function StoryPage({ params }: StoryPageProps) {
     },
   };
 
+  const videoStructuredData = story.video_url
+    ? {
+        "@context": "https://schema.org",
+        "@type": "VideoObject",
+        name: story.title,
+        description,
+        thumbnailUrl: [imageUrl],
+        uploadDate: story.publish_date,
+        contentUrl: story.video_url,
+        embedUrl: videoEmbedUrl || story.video_url,
+        publisher: {
+          "@type": "Organization",
+          name: "Daily Good News",
+          logo: {
+            "@type": "ImageObject",
+            url: `${siteUrl}/og-image.jpg`,
+          },
+        },
+      }
+    : null;
+
   return (
     <article style={{ maxWidth: 760, margin: "0 auto", padding: 40 }}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(structuredData),
+          __html: JSON.stringify(articleStructuredData),
         }}
       />
 
-      <h1>{story.title}</h1>
+      {videoStructuredData ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(videoStructuredData),
+          }}
+        />
+      ) : null}
 
-      {story.image_url && (
+      <div style={{ marginBottom: 24 }}>
+        <small style={{ textTransform: "capitalize", color: "#64748b" }}>
+          {categoryName}
+          {formattedDate ? ` • ${formattedDate}` : ""}
+        </small>
+
+        <h1
+          style={{
+            fontSize: "2.5rem",
+            lineHeight: 1.15,
+            margin: "12px 0 16px",
+          }}
+        >
+          {story.title}
+        </h1>
+
+        {story.source_name ? (
+          <p style={{ color: "#6b7280", fontSize: 14, marginTop: 0 }}>
+            Originally published on {story.source_name}
+          </p>
+        ) : null}
+      </div>
+
+      {videoEmbedUrl ? (
+        <div
+          style={{
+            aspectRatio: "16 / 9",
+            width: "100%",
+            overflow: "hidden",
+            borderRadius: 20,
+            background: "#000",
+            margin: "20px 0 28px",
+          }}
+        >
+          <iframe
+            src={videoEmbedUrl}
+            title={`Video preview for ${story.title}`}
+            style={{
+              width: "100%",
+              height: "100%",
+              border: 0,
+            }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      ) : story.image_url ? (
         <img
           src={story.image_url}
           alt={story.title}
@@ -211,66 +338,101 @@ export default async function StoryPage({ params }: StoryPageProps) {
             maxHeight: 420,
             objectFit: "cover",
             borderRadius: 20,
-            margin: "20px 0",
+            margin: "20px 0 28px",
           }}
         />
-      )}
+      ) : null}
 
-      {story.video_url && (
-        <div style={{ margin: "24px 0" }}>
-          {videoEmbedUrl ? (
-            <div
-              style={{
-                position: "relative",
-                width: "100%",
-                paddingTop: "56.25%",
-                borderRadius: 20,
-                overflow: "hidden",
-                background: "#000",
-              }}
-            >
-              <iframe
-                src={videoEmbedUrl}
-                title={`Video for ${story.title}`}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  border: 0,
-                }}
-              />
-            </div>
-          ) : (
-            <a
-              href={story.video_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: "inline-block",
-                color: "#047857",
-                fontWeight: 700,
-                textDecoration: "underline",
-              }}
-            >
-              Watch the video
-            </a>
-          )}
-        </div>
-      )}
+      {story.summary ? (
+        <p
+          style={{
+            fontSize: 18,
+            lineHeight: 1.8,
+            color: "#475569",
+          }}
+        >
+          {cleanTextForMeta(story.summary)}
+        </p>
+      ) : null}
+
+      {story.content ? (
+        <div
+          style={{
+            fontSize: 18,
+            lineHeight: 1.8,
+            color: "#0f172a",
+          }}
+          dangerouslySetInnerHTML={{
+            __html: story.content,
+          }}
+        />
+      ) : null}
 
       <div
         style={{
-          fontSize: 18,
-          lineHeight: 1.8,
-          color: "#0f172a",
+          marginTop: 36,
+          paddingTop: 20,
+          borderTop: "1px solid #e2e8f0",
+          color: "#475569",
+          fontSize: 15,
+          lineHeight: 1.6,
         }}
-        dangerouslySetInnerHTML={{
-          __html: story.content ?? "",
-        }}
-      />
+      >
+        {story.source_url && story.source_name ? (
+          <div style={{ marginBottom: story.is_reader_submission && story.submitted_by_name ? 8 : 0 }}>
+            Originally published on{" "}
+            <a
+              href={story.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: "#0f172a",
+                fontWeight: 600,
+                textDecoration: "underline",
+              }}
+            >
+              {story.source_name}
+            </a>
+            .
+          </div>
+        ) : null}
+
+        {story.is_reader_submission && story.submitted_by_name ? (
+          <div>
+            Submitted by{" "}
+            <span style={{ fontWeight: 600 }}>{story.submitted_by_name}</span>
+          </div>
+        ) : null}
+      </div>
+
+      {related.length > 0 ? (
+        <section
+          style={{
+            marginTop: 44,
+            paddingTop: 28,
+            borderTop: "1px solid #e2e8f0",
+          }}
+        >
+          <h2 style={{ fontSize: 24, marginBottom: 16 }}>More good news</h2>
+
+          <ul style={{ paddingLeft: 20, lineHeight: 1.8 }}>
+            {related.map((relatedStory) => (
+              <li key={relatedStory.id}>
+                <Link
+                  href={`/stories/${relatedStory.slug}`}
+                  style={{
+                    color: "#0f172a",
+                    fontWeight: 600,
+                    textDecoration: "underline",
+                  }}
+                >
+                  {relatedStory.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </article>
   );
 }

@@ -2,10 +2,27 @@ import { supabase } from "../../../lib/supabase";
 import Link from "next/link";
 import type { Metadata } from "next";
 
+type CategoryPageProps = {
+  params: Promise<{ slug: string }>;
+};
+
+type StoryCard = {
+  id: string;
+  title: string;
+  slug: string | null;
+  summary: string | null;
+  content: string | null;
+  image_url: string | null;
+  video_url?: string | null;
+  category_slug: string | null;
+  publish_date: string | null;
+};
+
 function formatDate(dateString?: string | null) {
   if (!dateString) return "";
 
   const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
 
   return date.toLocaleDateString("en-US", {
     month: "short",
@@ -15,7 +32,7 @@ function formatDate(dateString?: string | null) {
 }
 
 function formatCategoryName(slug?: string | null) {
-  if (!slug) return "Category";
+  if (!slug) return "Hope";
 
   return slug
     .split("-")
@@ -23,23 +40,28 @@ function formatCategoryName(slug?: string | null) {
     .join(" ");
 }
 
-function getYouTubeThumbnailUrl(videoUrl?: string | null) {
-  if (!videoUrl) return null;
+function stripHtml(text: string) {
+  return text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getVideoThumbnail(value: string | null | undefined) {
+  if (!value) return null;
 
   try {
-    const url = new URL(videoUrl);
+    const url = new URL(value);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
 
     if (host === "youtube.com" || host.endsWith(".youtube.com")) {
-      const videoId = url.searchParams.get("v");
+      const videoId =
+        url.searchParams.get("v") ||
+        url.pathname.match(/^\/shorts\/([^/?#]+)/)?.[1] ||
+        url.pathname.match(/^\/embed\/([^/?#]+)/)?.[1];
 
       if (videoId) {
         return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-      }
-
-      const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
-      if (shortsMatch?.[1]) {
-        return `https://img.youtube.com/vi/${shortsMatch[1]}/hqdefault.jpg`;
       }
     }
 
@@ -57,73 +79,35 @@ function getYouTubeThumbnailUrl(videoUrl?: string | null) {
   }
 }
 
-function VideoFallbackPreview() {
-  return (
-    <div
-      style={{
-        width: "100%",
-        height: 160,
-        background: "linear-gradient(135deg, #ecfdf5, #e0f2fe)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 38,
-        color: "#047857",
-        position: "relative",
-      }}
-    >
-      ▶
-      <span
-        style={{
-          position: "absolute",
-          right: 10,
-          bottom: 10,
-          borderRadius: 999,
-          background: "rgba(15, 23, 42, 0.82)",
-          color: "#ffffff",
-          fontSize: 12,
-          fontWeight: 700,
-          padding: "5px 9px",
-        }}
-      >
-        Video
-      </span>
-    </div>
-  );
-}
-
-/* ----------------------- */
-/* 🔎 Category Metadata     */
-/* ----------------------- */
-
 export async function generateMetadata({
   params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
+}: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params;
 
   const categoryName = formatCategoryName(slug);
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    "https://your-domain.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
+
+  const description = `Read uplifting ${categoryName.toLowerCase()} stories from Daily Good News. Positive reporting that inspires hope.`;
 
   return {
-    title: `${categoryName} News`,
-    description: `Read uplifting ${categoryName.toLowerCase()} stories from Daily Good News. Positive reporting that inspires hope.`,
+    title: `${categoryName} News | Daily Good News`,
+    description,
     alternates: {
       canonical: `${siteUrl}/category/${slug}`,
     },
     openGraph: {
       title: `${categoryName} News | Daily Good News`,
-      description: `Read uplifting ${categoryName.toLowerCase()} stories from Daily Good News.`,
+      description,
       url: `${siteUrl}/category/${slug}`,
+      siteName: "Daily Good News",
       type: "website",
+      images: [{ url: `${siteUrl}/og-image.jpg` }],
     },
     twitter: {
       card: "summary_large_image",
       title: `${categoryName} News | Daily Good News`,
-      description: `Read uplifting ${categoryName.toLowerCase()} stories from Daily Good News.`,
+      description,
+      images: [`${siteUrl}/og-image.jpg`],
     },
     robots: {
       index: true,
@@ -132,16 +116,9 @@ export async function generateMetadata({
   };
 }
 
-/* ----------------------- */
-/* 📄 Category Page         */
-/* ----------------------- */
-
-export default async function CategoryPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = await params;
+  const categoryName = formatCategoryName(slug);
 
   const { data } = await supabase
     .from("stories")
@@ -150,11 +127,25 @@ export default async function CategoryPage({
     .not("slug", "is", null)
     .order("publish_date", { ascending: false });
 
+  const stories = (data || []) as StoryCard[];
+
   return (
     <main style={{ maxWidth: 900, margin: "auto", padding: 40 }}>
-      <h1 style={{ textTransform: "capitalize" }}>
-        {formatCategoryName(slug)}
-      </h1>
+      <h1 style={{ marginBottom: 8 }}>{categoryName} News</h1>
+
+      <p
+        style={{
+          marginTop: 0,
+          maxWidth: 720,
+          color: "#475569",
+          fontSize: 17,
+          lineHeight: 1.7,
+        }}
+      >
+        Discover uplifting {categoryName.toLowerCase()} stories from around the
+        world. Read positive news that highlights hope, kindness, and meaningful
+        progress.
+      </p>
 
       <div
         style={{
@@ -164,9 +155,10 @@ export default async function CategoryPage({
           marginTop: 30,
         }}
       >
-        {data?.map((story) => {
-          const videoThumbnailUrl = getYouTubeThumbnailUrl(story.video_url);
-          const cardImageUrl = story.image_url || videoThumbnailUrl;
+        {stories.map((story) => {
+          const videoThumbnail = getVideoThumbnail(story.video_url);
+          const displayImage = videoThumbnail || story.image_url;
+          const excerpt = stripHtml(story.summary || story.content || "").slice(0, 120);
 
           return (
             <Link
@@ -178,14 +170,14 @@ export default async function CategoryPage({
                 overflow: "hidden",
                 boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
                 display: "block",
-                textDecoration: "none",
                 color: "inherit",
+                textDecoration: "none",
               }}
             >
-              {cardImageUrl ? (
+              {displayImage ? (
                 <div style={{ position: "relative" }}>
                   <img
-                    src={cardImageUrl}
+                    src={displayImage}
                     alt={story.title}
                     style={{
                       width: "100%",
@@ -196,25 +188,37 @@ export default async function CategoryPage({
                   />
 
                   {story.video_url ? (
-                    <span
+                    <div
+                      aria-label="Video story"
                       style={{
                         position: "absolute",
-                        right: 10,
-                        bottom: 10,
-                        borderRadius: 999,
-                        background: "rgba(15, 23, 42, 0.82)",
-                        color: "#ffffff",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        padding: "5px 9px",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "rgba(15, 23, 42, 0.18)",
                       }}
                     >
-                      ▶ Video
-                    </span>
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: "999px",
+                          background: "rgba(255, 255, 255, 0.92)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#0f172a",
+                          fontSize: 22,
+                          fontWeight: 800,
+                          paddingLeft: 3,
+                        }}
+                      >
+                        ▶
+                      </div>
+                    </div>
                   ) : null}
                 </div>
-              ) : story.video_url ? (
-                <VideoFallbackPreview />
               ) : (
                 <div
                   style={{
@@ -242,7 +246,7 @@ export default async function CategoryPage({
                     marginBottom: 6,
                   }}
                 >
-                  {story.category_slug}
+                  {formatCategoryName(story.category_slug)}
                   {story.video_url ? " • Video" : ""}
                 </div>
 
@@ -261,9 +265,11 @@ export default async function CategoryPage({
                     color: "#555",
                     fontSize: 14,
                     margin: "0 0 12px 0",
+                    lineHeight: 1.5,
                   }}
                 >
-                  {(story.summary || story.content || "").slice(0, 100)}...
+                  {excerpt}
+                  {excerpt ? "..." : ""}
                 </p>
 
                 <div
