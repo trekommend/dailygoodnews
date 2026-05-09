@@ -4,32 +4,31 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ||
-      "https://your-domain.vercel.app"
+    process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net"
   ),
   title: {
-    default: "Daily Good News",
-    template: "%s | Daily Good News",
+    default: "The Good in Us",
+    template: "%s | The Good in Us",
   },
   description:
-    "A daily source of uplifting, positive news from around the world. Real stories that inspire hope.",
+    "A source of uplifting, positive news from around the world. Real stories that inspire hope and highlight the good in us.",
   openGraph: {
-    title: "Daily Good News",
+    title: "The Good in Us",
     description:
-      "A daily source of uplifting, positive news from around the world.",
-    siteName: "Daily Good News",
+      "Uplifting, positive news from around the world. Real stories that inspire hope and highlight the good in us.",
+    siteName: "The Good in Us",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Daily Good News",
+    title: "The Good in Us",
     description:
-      "A daily source of uplifting, positive news from around the world.",
+      "Uplifting, positive news from around the world. Real stories that inspire hope and highlight the good in us.",
   },
   robots: {
-  index: process.env.NODE_ENV === "production",
-  follow: process.env.NODE_ENV === "production",
-},
+    index: process.env.NODE_ENV === "production",
+    follow: process.env.NODE_ENV === "production",
+  },
 };
 
 export default function RootLayout({
@@ -84,14 +83,20 @@ export default function RootLayout({
                   color: "#111827",
                 }}
               >
-                Daily Good News 🌤️
+                The Good in Us 🌤️
               </Link>
 
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                <Link href="/stories" style={{ textDecoration: "none", color: "#111827" }}>
+                <Link
+                  href="/stories"
+                  style={{ textDecoration: "none", color: "#111827" }}
+                >
                   Stories
                 </Link>
-                <Link href="/submit" style={{ textDecoration: "none", color: "#111827" }}>
+                <Link
+                  href="/submit"
+                  style={{ textDecoration: "none", color: "#111827" }}
+                >
                   Submit
                 </Link>
               </div>
@@ -105,19 +110,34 @@ export default function RootLayout({
                 fontSize: 14,
               }}
             >
-              <Link href="/category/kindness" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/kindness"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Kindness
               </Link>
-              <Link href="/category/community" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/community"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Community
               </Link>
-              <Link href="/category/animals" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/animals"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Animals
               </Link>
-              <Link href="/category/health" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/health"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Health
               </Link>
-              <Link href="/category/hope" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/hope"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Hope
               </Link>
             </div>

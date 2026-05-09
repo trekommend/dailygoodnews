@@ -210,9 +210,10 @@ export default async function HomePage() {
             lineHeight: 1.7,
           }}
         >
-          Discover uplifting stories, inspiring moments, and positive news from
-          around the world. From acts of kindness to breakthroughs in health,
-          animals, community, and hope, we highlight the good in us.
+          The Good in Us shares uplifting stories, inspiring moments, and
+          positive news from around the world. From acts of kindness to
+          breakthroughs in health, animals, community, and hope, we highlight
+          the good happening every day.
         </p>
 
         <div

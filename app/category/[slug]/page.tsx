@@ -87,25 +87,25 @@ export async function generateMetadata({
   const categoryName = formatCategoryName(slug);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
 
-  const description = `Read uplifting ${categoryName.toLowerCase()} stories from Daily Good News. Positive reporting that inspires hope.`;
+  const description = `Read uplifting ${categoryName.toLowerCase()} stories from The Good in Us. Positive reporting that inspires hope.`;
 
   return {
-    title: `${categoryName} News | Daily Good News`,
+    title: `${categoryName} News | The Good in Us`,
     description,
     alternates: {
       canonical: `${siteUrl}/category/${slug}`,
     },
     openGraph: {
-      title: `${categoryName} News | Daily Good News`,
+      title: `${categoryName} News | The Good in Us`,
       description,
       url: `${siteUrl}/category/${slug}`,
-      siteName: "Daily Good News",
+      siteName: "The Good in Us",
       type: "website",
       images: [{ url: `${siteUrl}/og-image.jpg` }],
     },
     twitter: {
       card: "summary_large_image",
-      title: `${categoryName} News | Daily Good News`,
+      title: `${categoryName} News | The Good in Us`,
       description,
       images: [`${siteUrl}/og-image.jpg`],
     },
@@ -143,8 +143,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         }}
       >
         Discover uplifting {categoryName.toLowerCase()} stories from around the
-        world. Read positive news that highlights hope, kindness, and meaningful
-        progress.
+        world. The Good in Us highlights positive news, hopeful moments, and
+        meaningful progress.
       </p>
 
       <div

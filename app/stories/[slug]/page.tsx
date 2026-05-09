@@ -141,20 +141,20 @@ export async function generateMetadata({
 
   if (!story) {
     return {
-      title: "Story not found | Daily Good News",
+      title: "Story not found | The Good in Us",
       robots: { index: false, follow: false },
     };
   }
 
   const cleanText = cleanTextForMeta(story.summary ?? story.content ?? "");
   const description =
-    truncateForMeta(cleanText) || "A positive news story from Daily Good News.";
+    truncateForMeta(cleanText) || "A positive news story from The Good in Us.";
 
   const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
   const ogImage = story.image_url ? story.image_url : `${siteUrl}/og-image.jpg`;
 
   return {
-    title: `${story.title} – Positive News | Daily Good News`,
+    title: `${story.title} – Positive News | The Good in Us`,
     description,
     alternates: {
       canonical: canonicalUrl,
@@ -164,7 +164,7 @@ export async function generateMetadata({
       url: canonicalUrl,
       title: story.title,
       description,
-      siteName: "Daily Good News",
+      siteName: "The Good in Us",
       images: [{ url: ogImage }],
       publishedTime: story.publish_date ?? undefined,
     },
@@ -201,13 +201,13 @@ export default async function StoryPage({ params }: StoryPageProps) {
   const authorName =
     story.is_reader_submission && story.submitted_by_name
       ? story.submitted_by_name
-      : "Daily Good News";
+      : "The Good in Us";
 
   const cleanSummary = cleanTextForMeta(story.summary ?? "");
   const cleanContent = cleanTextForMeta(story.content ?? "");
   const description =
     truncateForMeta(cleanSummary || cleanContent) ||
-    "A positive news story from Daily Good News.";
+    "A positive news story from The Good in Us.";
 
   const { data: relatedStories } = await supabase
     .from("stories")
@@ -232,7 +232,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
     },
     publisher: {
       "@type": "Organization",
-      name: "Daily Good News",
+      name: "The Good in Us",
       logo: {
         "@type": "ImageObject",
         url: `${siteUrl}/og-image.jpg`,
@@ -256,7 +256,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
         embedUrl: videoEmbedUrl || story.video_url,
         publisher: {
           "@type": "Organization",
-          name: "Daily Good News",
+          name: "The Good in Us",
           logo: {
             "@type": "ImageObject",
             url: `${siteUrl}/og-image.jpg`,
