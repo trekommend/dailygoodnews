@@ -75,6 +75,7 @@ function getYouTubeThumbnailUrl(videoUrl?: string | null) {
       }
 
       const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
+
       if (shortsMatch?.[1]) {
         return `https://img.youtube.com/vi/${shortsMatch[1]}/hqdefault.jpg`;
       }
@@ -100,17 +101,27 @@ function getCardImageUrl(story: Story) {
 
 function shortSummary(summary?: string | null, maxLength = 150) {
   if (!summary) return "";
-  const cleaned = summary.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+
+  const cleaned = summary
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   if (cleaned.length <= maxLength) return cleaned;
 
   const sliced = cleaned.slice(0, maxLength);
   const lastSpace = sliced.lastIndexOf(" ");
 
-  return `${sliced.slice(0, lastSpace > 80 ? lastSpace : maxLength).trim()}...`;
+  return `${sliced
+    .slice(0, lastSpace > 80 ? lastSpace : maxLength)
+    .trim()}...`;
 }
 
-function VideoFallbackPreview({ height }: { height: number | string }) {
+function VideoFallbackPreview({
+  height,
+}: {
+  height: number | string;
+}) {
   return (
     <div
       style={{
@@ -157,7 +168,13 @@ export default async function HomePage() {
 
   if (error) {
     return (
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
+      <main
+        style={{
+          maxWidth: 1100,
+          margin: "0 auto",
+          padding: "24px 16px",
+        }}
+      >
         <h1>The Good in Us</h1>
         <p>We couldn’t load stories right now.</p>
       </main>
@@ -168,21 +185,31 @@ export default async function HomePage() {
 
   if (stories.length === 0) {
     return (
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
+      <main
+        style={{
+          maxWidth: 1100,
+          margin: "0 auto",
+          padding: "24px 16px",
+        }}
+      >
         <h1>The Good in Us</h1>
         <p>No stories published yet.</p>
       </main>
     );
   }
 
-  const recentHeroCandidates = stories.filter((story) => getAgeHours(story) <= 72);
+  const recentHeroCandidates = stories.filter(
+    (story) => getAgeHours(story) <= 72
+  );
 
   const featuredStory =
     recentHeroCandidates.length > 0
       ? [...recentHeroCandidates].sort(
           (a, b) => getFeaturedRank(b) - getFeaturedRank(a)
         )[0]
-      : [...stories].sort((a, b) => getFeaturedRank(b) - getFeaturedRank(a))[0];
+      : [...stories].sort(
+          (a, b) => getFeaturedRank(b) - getFeaturedRank(a)
+        )[0];
 
   const featuredImageUrl = getCardImageUrl(featuredStory);
 
@@ -201,65 +228,42 @@ export default async function HomePage() {
     .slice(0, 18);
 
   return (
-    <main style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
+    <main
+      style={{
+        maxWidth: 1100,
+        margin: "0 auto",
+        padding: "24px 16px",
+      }}
+    >
       <section
         aria-label="Site introduction"
         style={{
-          marginBottom: 18,
-          padding: "14px 16px",
-          border: "1px solid #e5e7eb",
-          borderRadius: 18,
-          background: "#ffffff",
+          marginBottom: 14,
         }}
       >
         <h1
           style={{
-            margin: "0 0 6px 0",
-            fontSize: "clamp(24px, 4vw, 34px)",
-            lineHeight: 1.1,
+            margin: "0 0 4px 0",
+            fontSize: 22,
+            lineHeight: 1.2,
+            fontWeight: 800,
           }}
         >
-          The Good in Us
+          Positive News That Inspires
         </h1>
 
         <p
           style={{
             margin: 0,
-            maxWidth: 820,
+            maxWidth: 680,
             color: "#4b5563",
-            fontSize: 15,
-            lineHeight: 1.55,
+            fontSize: 14,
+            lineHeight: 1.5,
           }}
         >
-          Positive news, uplifting stories, and hopeful moments from around the
-          world.
+          The Good in Us shares uplifting stories, inspiring moments, and
+          positive news from around the world.
         </p>
-
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            marginTop: 10,
-            fontSize: 13,
-          }}
-        >
-          <Link href="/category/kindness" style={{ color: "#047857", fontWeight: 600 }}>
-            Kindness
-          </Link>
-          <Link href="/category/community" style={{ color: "#047857", fontWeight: 600 }}>
-            Community
-          </Link>
-          <Link href="/category/animals" style={{ color: "#047857", fontWeight: 600 }}>
-            Animals
-          </Link>
-          <Link href="/category/health" style={{ color: "#047857", fontWeight: 600 }}>
-            Health
-          </Link>
-          <Link href="/category/hope" style={{ color: "#047857", fontWeight: 600 }}>
-            Hope
-          </Link>
-        </div>
       </section>
 
       <section
@@ -286,6 +290,7 @@ export default async function HomePage() {
                 display: "block",
               }}
             />
+
             {featuredStory.video_url ? (
               <span
                 style={{
@@ -305,7 +310,9 @@ export default async function HomePage() {
             ) : null}
           </div>
         ) : featuredStory.video_url ? (
-          <VideoFallbackPreview height="clamp(200px, 34vw, 360px)" />
+          <VideoFallbackPreview
+            height="clamp(200px, 34vw, 360px)"
+          />
         ) : null}
 
         <div style={{ padding: 22 }}>
@@ -363,12 +370,16 @@ export default async function HomePage() {
             }}
           >
             <span>{formatDate(featuredStory.publish_date)}</span>
+
             {featuredStory.source_url ? (
               <a
                 href={featuredStory.source_url}
                 target="_blank"
                 rel="noreferrer"
-                style={{ color: "#047857", fontWeight: 600 }}
+                style={{
+                  color: "#047857",
+                  fontWeight: 600,
+                }}
               >
                 Original source
               </a>
@@ -389,15 +400,27 @@ export default async function HomePage() {
           }}
         >
           <div>
-            <h2 style={{ margin: 0 }}>Latest uplifting stories</h2>
-            <p style={{ margin: "6px 0 0 0", color: "#6b7280" }}>
+            <h2 style={{ margin: 0 }}>
+              Latest uplifting stories
+            </h2>
+
+            <p
+              style={{
+                margin: "6px 0 0 0",
+                color: "#6b7280",
+              }}
+            >
               Fresh positive stories appear first.
             </p>
           </div>
 
           <Link
             href="/stories"
-            style={{ color: "#047857", fontWeight: 600, fontSize: 14 }}
+            style={{
+              color: "#047857",
+              fontWeight: 600,
+              fontSize: 14,
+            }}
           >
             View all stories
           </Link>
@@ -406,7 +429,8 @@ export default async function HomePage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(260px, 1fr))",
             gap: 18,
           }}
         >
@@ -437,6 +461,7 @@ export default async function HomePage() {
                         display: "block",
                       }}
                     />
+
                     {story.video_url ? (
                       <span
                         style={{
@@ -444,7 +469,8 @@ export default async function HomePage() {
                           right: 10,
                           bottom: 10,
                           borderRadius: 999,
-                          background: "rgba(15, 23, 42, 0.82)",
+                          background:
+                            "rgba(15, 23, 42, 0.82)",
                           color: "#ffffff",
                           fontSize: 12,
                           fontWeight: 700,
@@ -495,7 +521,9 @@ export default async function HomePage() {
                       lineHeight: 1.25,
                     }}
                   >
-                    <Link href={`/stories/${story.slug}`}>{story.title}</Link>
+                    <Link href={`/stories/${story.slug}`}>
+                      {story.title}
+                    </Link>
                   </h3>
 
                   {story.summary ? (
@@ -521,12 +549,20 @@ export default async function HomePage() {
                       color: "#6b7280",
                     }}
                   >
-                    <span>{formatDate(story.publish_date)}</span>
+                    <span>
+                      {formatDate(story.publish_date)}
+                    </span>
+
                     <Link
                       href={`/stories/${story.slug}`}
-                      style={{ color: "#047857", fontWeight: 600 }}
+                      style={{
+                        color: "#047857",
+                        fontWeight: 600,
+                      }}
                     >
-                      {story.video_url ? "Watch / read" : "Read more"}
+                      {story.video_url
+                        ? "Watch / read"
+                        : "Read more"}
                     </Link>
                   </div>
                 </div>
