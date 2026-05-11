@@ -1249,7 +1249,7 @@ async function extractImageFromArticlePage(
 ): Promise<string | null> {
   const controller = new AbortController();
   const isWaPo = /washingtonpost\.com/i.test(articleUrl);
-const timeoutMs = 5000;
+const timeoutMs = isWaPo ? 12000 : 5000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
