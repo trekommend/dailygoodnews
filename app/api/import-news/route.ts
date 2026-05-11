@@ -45,7 +45,7 @@ type ImageDebugResult = {
   best: string | null;
 };
 
-const IMPORTER_VERSION = "scored-filter-v25-wapo-require-image";
+const IMPORTER_VERSION = "scored-filter-v26-timeout-safe";
 
 const FEED_SOURCES: FeedSource[] = [
   {
@@ -53,7 +53,7 @@ const FEED_SOURCES: FeedSource[] = [
     url: "https://www.goodnewsnetwork.org/feed/",
     defaultCategory: "hope",
     weight: 3,
-    batchSize: 5,
+    batchSize: 3,
     trusted: true,
   },
   {
@@ -61,7 +61,7 @@ const FEED_SOURCES: FeedSource[] = [
     url: "https://www.positive.news/feed/",
     defaultCategory: "hope",
     weight: 3,
-    batchSize: 5,
+    batchSize: 3,
     trusted: true,
   },
   {
@@ -69,7 +69,7 @@ const FEED_SOURCES: FeedSource[] = [
     url: "https://www.goodgoodgood.co/articles/rss.xml",
     defaultCategory: "hope",
     weight: 3,
-    batchSize: 3,
+    batchSize: 2,
     trusted: true,
   },
   {
@@ -77,21 +77,21 @@ const FEED_SOURCES: FeedSource[] = [
     url: "https://moxie.foxnews.com/google-publisher/health.xml",
     defaultCategory: "health",
     weight: 2,
-    batchSize: 5,
+    batchSize: 2,
   },
   {
     name: "Fox News Science",
     url: "https://moxie.foxnews.com/google-publisher/science.xml",
     defaultCategory: "hope",
     weight: 2,
-    batchSize: 5,
+    batchSize: 2,
   },
   {
     name: "Washington Post Lifestyle",
     url: "https://feeds.washingtonpost.com/rss/lifestyle",
     defaultCategory: "community",
     weight: 2,
-    batchSize: 3,
+    batchSize: 1,
   },
 ];
 
@@ -1249,7 +1249,7 @@ async function extractImageFromArticlePage(
 ): Promise<string | null> {
   const controller = new AbortController();
   const isWaPo = /washingtonpost\.com/i.test(articleUrl);
-  const timeoutMs = isWaPo ? 30000 : 8000;
+const timeoutMs = 5000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
