@@ -338,21 +338,67 @@ const WAPO_LIFESTYLE_BLOCK_PATTERNS = [
 ];
 
 function slugify(text: string) {
-  return text
+  const STOP_WORDS = new Set([
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "these",
+    "this",
+    "to",
+    "was",
+    "were",
+    "with",
+  ]);
+
+  const words = text
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((word) => !STOP_WORDS.has(word));
+
+  const shortened: string[] = [];
+  let currentLength = 0;
+
+  for (const word of words) {
+    const additionalLength = word.length + (shortened.length ? 1 : 0);
+
+    if (currentLength + additionalLength > 80) {
+      break;
+    }
+
+    shortened.push(word);
+    currentLength += additionalLength;
+  }
+
+  return shortened.join("-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
 function makeUniqueSlug(title: string, sourceUrl: string) {
   const base = slugify(title);
+
   const suffix = sourceUrl
     .toLowerCase()
     .replace(/^https?:\/\//, "")
     .replace(/[^a-z0-9]/g, "")
-    .slice(-8);
+    .slice(-6);
 
   return `${base}-${suffix}`;
 }
