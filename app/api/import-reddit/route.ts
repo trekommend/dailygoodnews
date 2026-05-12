@@ -1,3 +1,4 @@
+import Parser from "rss-parser";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -7,153 +8,175 @@ export const maxDuration = 60;
 
 const supabase = createAdminClient();
 
-const IMPORTER_VERSION = "reddit-import-v1";
+const IMPORTER_VERSION = "reddit-rss-import-v1";
 
-const REDDIT_URL =
-  "https://www.reddit.com/r/MadeMeSmile/top.json?t=day&limit=15";
+const SUBREDDIT = "MadeMeSmile";
+const REDDIT_RSS_URL = `https://www.reddit.com/r/${SUBREDDIT}/top/.rss?t=day`;
 
-const MIN_SCORE = 5000;
-const MIN_COMMENTS = 50;
+const MIN_IMPORT_COUNT = 1;
+const MAX_ITEMS_TO_CHECK = 15;
 
-type RedditPost = {
-  id: string;
-  title: string;
-  selftext?: string;
-  permalink: string;
-  author: string;
-  subreddit: string;
-  score: number;
-  num_comments: number;
-  upvote_ratio?: number;
-  created_utc: number;
-  url?: string;
-  thumbnail?: string;
-  is_video?: boolean;
-  over_18?: boolean;
-  post_hint?: string;
-  media?: any;
-  secure_media?: any;
-  preview?: any;
+type RedditFeedItem = {
+  title?: string;
+  link?: string;
+  pubDate?: string;
+  content?: string;
+  contentSnippet?: string;
+  id?: string;
 };
 
 function slugify(text: string) {
-  return text
+  const STOP_WORDS = new Set([
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "these",
+    "this",
+    "to",
+    "was",
+    "were",
+    "with",
+  ]);
+
+  const words = text
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 80)
-    .replace(/-$/, "");
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((word) => !STOP_WORDS.has(word));
+
+  const shortened: string[] = [];
+  let currentLength = 0;
+
+  for (const word of words) {
+    const additionalLength = word.length + (shortened.length ? 1 : 0);
+
+    if (currentLength + additionalLength > 70) {
+      break;
+    }
+
+    shortened.push(word);
+    currentLength += additionalLength;
+  }
+
+  return shortened.join("-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
-function getVideoUrl(post: RedditPost): string | null {
-  try {
-    if (
-      post.secure_media?.reddit_video?.fallback_url
-    ) {
-      return post.secure_media.reddit_video.fallback_url;
-    }
-
-    if (
-      typeof post.url === "string" &&
-      (
-        post.url.includes("youtube.com") ||
-        post.url.includes("youtu.be") ||
-        post.url.includes("vimeo.com")
-      )
-    ) {
-      return post.url;
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
+function extractRedditPostId(link: string) {
+  const match = link.match(/\/comments\/([a-z0-9]+)\//i);
+  return match?.[1] || null;
 }
 
-function getImageUrl(post: RedditPost): string | null {
-  try {
-    const previewImage =
-      post.preview?.images?.[0]?.source?.url;
-
-    if (
-      previewImage &&
-      typeof previewImage === "string"
-    ) {
-      return previewImage
-        .replace(/&amp;/g, "&");
-    }
-
-    if (
-      post.thumbnail &&
-      typeof post.thumbnail === "string" &&
-      post.thumbnail.startsWith("http")
-    ) {
-      return post.thumbnail;
-    }
-
-    if (
-      post.url &&
-      (
-        post.url.endsWith(".jpg") ||
-        post.url.endsWith(".jpeg") ||
-        post.url.endsWith(".png") ||
-        post.url.endsWith(".webp")
-      )
-    ) {
-      return post.url;
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
+function decodeHtmlEntities(text: string) {
+  return text
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"')
+    .replace(/&#8230;/g, "...")
+    .replace(/&#8242;/g, "'")
+    .replace(/&#8243;/g, '"')
+    .replace(/&#038;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
-function shouldImport(post: RedditPost) {
-  if (!post.title) {
-    return {
-      accepted: false,
-      reason: "Missing title",
-    };
+function stripHtml(html = "") {
+  return decodeHtmlEntities(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractFirstImage(content = "") {
+  const imageMatch =
+    content.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] ||
+    content.match(/href=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']/i)?.[1];
+
+  if (!imageMatch) return null;
+
+  const cleaned = decodeHtmlEntities(imageMatch.trim());
+
+  if (!/^https?:\/\//i.test(cleaned)) return null;
+  if (/avatar|icon|logo|sprite|1x1|pixel/i.test(cleaned)) return null;
+
+  return cleaned;
+}
+
+function extractVideoUrl(content = "", link = "") {
+  const decodedContent = decodeHtmlEntities(content);
+
+  const directVideo =
+    decodedContent.match(/https?:\/\/v\.redd\.it\/[a-z0-9]+/i)?.[0] ||
+    decodedContent.match(/https?:\/\/[^"'\s<>]+\.mp4[^"'\s<>]*/i)?.[0];
+
+  if (directVideo) return directVideo;
+
+  const externalVideo =
+    decodedContent.match(/https?:\/\/(?:www\.)?youtube\.com\/watch\?v=[^"'\s<>]+/i)?.[0] ||
+    decodedContent.match(/https?:\/\/youtu\.be\/[^"'\s<>]+/i)?.[0] ||
+    decodedContent.match(/https?:\/\/(?:www\.)?vimeo\.com\/[^"'\s<>]+/i)?.[0];
+
+  if (externalVideo) return externalVideo;
+
+  if (/\/comments\//i.test(link)) return null;
+
+  return null;
+}
+
+function containsBlockedTopic(title: string, content: string) {
+  const text = `${title} ${content}`.toLowerCase();
+
+  const blockedPatterns = [
+    /\bpolitics?\b/i,
+    /\belection\b/i,
+    /\btrump\b/i,
+    /\bbiden\b/i,
+    /\bwar\b/i,
+    /\bshooting\b/i,
+    /\bmurder\b/i,
+    /\babuse\b/i,
+    /\bnsfw\b/i,
+    /\baita\b/i,
+  ];
+
+  return blockedPatterns.some((pattern) => pattern.test(text));
+}
+
+function buildSummary(title: string, content: string) {
+  const cleaned = stripHtml(content);
+
+  if (cleaned && cleaned.length > 40) {
+    return cleaned.slice(0, 350).trim();
   }
 
-  if (post.over_18) {
-    return {
-      accepted: false,
-      reason: "NSFW",
-    };
-  }
-
-  if (post.score < MIN_SCORE) {
-    return {
-      accepted: false,
-      reason: `Low score (${post.score})`,
-    };
-  }
-
-  if (post.num_comments < MIN_COMMENTS) {
-    return {
-      accepted: false,
-      reason: `Low comments (${post.num_comments})`,
-    };
-  }
-
-  const hasVideo = !!getVideoUrl(post);
-  const hasImage = !!getImageUrl(post);
-
-  if (!hasVideo && !hasImage) {
-    return {
-      accepted: false,
-      reason: "No image or video",
-    };
-  }
-
-  return {
-    accepted: true,
-    reason: "Accepted",
-  };
+  return `Popular uplifting Reddit post from r/${SUBREDDIT}: ${title}`;
 }
 
 export async function GET() {
@@ -161,137 +184,130 @@ export async function GET() {
 
   try {
     logs.push(`IMPORTER_VERSION: ${IMPORTER_VERSION}`);
+    logs.push(`Source: r/${SUBREDDIT} RSS`);
 
-    const response = await fetch(REDDIT_URL, {
+    const parser = new Parser<Record<string, never>, RedditFeedItem>({
       headers: {
-        "User-Agent":
-          "TheGoodInUsBot/1.0 (+https://www.thegoodinus.net)",
+        "User-Agent": "TheGoodInUsBot/1.0 (+https://www.thegoodinus.net)",
+        Accept: "application/rss+xml, application/xml, text/xml",
       },
-      cache: "no-store",
     });
 
-    if (!response.ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          logs: [
-            `Reddit fetch failed (${response.status})`,
-          ],
-        },
-        { status: 500 }
-      );
-    }
+    const feed = await parser.parseURL(REDDIT_RSS_URL);
+    const items = (feed.items || []).slice(0, MAX_ITEMS_TO_CHECK);
 
-    const json = await response.json();
-
-    const posts: RedditPost[] =
-      json?.data?.children?.map(
-        (child: any) => child.data
-      ) || [];
-
-    logs.push(`Fetched ${posts.length} Reddit posts`);
+    logs.push(`Fetched ${feed.items.length} RSS items`);
+    logs.push(`Checking ${items.length} items`);
 
     let saved = 0;
     let skipped = 0;
 
-    for (const post of posts) {
-      const decision = shouldImport(post);
+    for (const item of items) {
+      const title = item.title?.trim() || "Untitled Reddit post";
+      const link = item.link?.trim() || "";
 
-      if (!decision.accepted) {
-        skipped++;
-
-        logs.push(
-          `Skipped "${post.title}" (${decision.reason})`
-        );
-
+      if (!link) {
+        skipped += 1;
+        logs.push(`Skipped "${title}" (missing link)`);
         continue;
       }
 
-      const permalink = `https://www.reddit.com${post.permalink}`;
+      const redditPostId = extractRedditPostId(link);
+
+      if (!redditPostId) {
+        skipped += 1;
+        logs.push(`Skipped "${title}" (missing Reddit post id)`);
+        continue;
+      }
+
+      const rawContent = item.content || item.contentSnippet || "";
+
+      if (containsBlockedTopic(title, rawContent)) {
+        skipped += 1;
+        logs.push(`Skipped "${title}" (blocked topic)`);
+        continue;
+      }
+
+      const imageUrl = extractFirstImage(rawContent);
+      const videoUrl = extractVideoUrl(rawContent, link);
+
+      if (!imageUrl && !videoUrl) {
+        skipped += 1;
+        logs.push(`Skipped "${title}" (no image or video found in RSS)`);
+        continue;
+      }
 
       const { data: existing } = await supabase
         .from("stories")
         .select("id")
-        .eq("reddit_post_id", post.id)
+        .eq("reddit_post_id", redditPostId)
         .maybeSingle();
 
       if (existing) {
-        skipped++;
-
-        logs.push(
-          `Skipped duplicate "${post.title}"`
-        );
-
+        skipped += 1;
+        logs.push(`Skipped duplicate "${title}"`);
         continue;
       }
 
-      const imageUrl = getImageUrl(post);
-      const videoUrl = getVideoUrl(post);
+      const publishDate = item.pubDate
+        ? new Date(item.pubDate).toISOString()
+        : new Date().toISOString();
 
-      const slug =
-        `${slugify(post.title)}-${post.id}`;
-
-      const summary =
-        post.selftext?.trim()?.slice(0, 400) ||
-        `Popular uplifting Reddit post from r/${post.subreddit}.`;
-
-      const publishDate = new Date(
-        post.created_utc * 1000
-      ).toISOString();
+      const summary = buildSummary(title, rawContent);
+      const slug = `${slugify(title)}-${redditPostId}`;
 
       const insertPayload = {
-        title: post.title,
+        title,
         slug,
         summary,
         content: `
           <p>
-            Originally shared on Reddit in r/${post.subreddit}.
+            Originally shared on Reddit in r/${SUBREDDIT}.
           </p>
 
           <p>
-            <a href="${permalink}" target="_blank" rel="noopener noreferrer">
+            <a href="${link}" target="_blank" rel="noopener noreferrer">
               View original Reddit thread
             </a>
           </p>
         `,
         image_url: imageUrl,
         video_url: videoUrl,
-        source_url: permalink,
-        source_name: "Reddit / r/MadeMeSmile",
+        source_url: link,
+        source_name: `Reddit / r/${SUBREDDIT}`,
         source_type: "reddit",
         is_reddit_post: true,
-        reddit_post_id: post.id,
-        reddit_subreddit: post.subreddit,
-        reddit_author: post.author,
-        reddit_permalink: permalink,
-        reddit_score: post.score,
-        reddit_comments_count: post.num_comments,
-        reddit_upvote_ratio: post.upvote_ratio || null,
+        reddit_post_id: redditPostId,
+        reddit_subreddit: SUBREDDIT,
+        reddit_author: null,
+        reddit_permalink: link,
+        reddit_score: null,
+        reddit_comments_count: null,
+        reddit_upvote_ratio: null,
         reddit_created_utc: publishDate,
         category_slug: "reddit",
         publish_date: publishDate,
-        story_score: post.score,
+        story_score: 100,
         positivity_score: 100,
         featured: false,
       };
 
-      const { error } = await supabase
-        .from("stories")
-        .insert(insertPayload);
+      const { error } = await supabase.from("stories").insert(insertPayload);
 
       if (error) {
-        skipped++;
-
-        logs.push(
-          `Insert failed "${post.title}": ${error.message}`
-        );
-
+        skipped += 1;
+        logs.push(`Insert failed "${title}": ${error.message}`);
         continue;
       }
 
-      saved++;
+      saved += 1;
+      logs.push(`Saved "${title}"`);
 
-      logs.push(`Saved "${post.title}"`);
+      if (saved >= MIN_IMPORT_COUNT) {
+        // Keep RSS import conservative for now.
+        // Remove this break later if you want more Reddit posts per run.
+        break;
+      }
     }
 
     logs.push(`Saved: ${saved}`);
@@ -308,7 +324,7 @@ export async function GET() {
         logs: [
           error instanceof Error
             ? error.message
-            : "Unknown Reddit importer error",
+            : "Unknown Reddit RSS importer error",
         ],
       },
       { status: 500 }
