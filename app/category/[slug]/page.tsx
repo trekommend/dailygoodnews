@@ -16,6 +16,8 @@ type StoryCard = {
   video_url?: string | null;
   category_slug: string | null;
   publish_date: string | null;
+  is_reddit_post?: boolean | null;
+  reddit_subreddit?: string | null;
 };
 
 function formatDate(dateString?: string | null) {
@@ -79,24 +81,41 @@ function getVideoThumbnail(value: string | null | undefined) {
   }
 }
 
+function getCardLabel(story: StoryCard) {
+  if (story.is_reddit_post) {
+    return `Reddit${story.reddit_subreddit ? ` / r/${story.reddit_subreddit}` : ""}`;
+  }
+
+  return formatCategoryName(story.category_slug);
+}
+
 export async function generateMetadata({
   params,
 }: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params;
 
   const categoryName = formatCategoryName(slug);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.thegoodinus.net";
 
-  const description = `Read uplifting ${categoryName.toLowerCase()} stories from The Good in Us. Positive reporting that inspires hope.`;
+  const description =
+    slug === "reddit"
+      ? "Uplifting posts from Reddit communities, curated by The Good in Us."
+      : `Read uplifting ${categoryName.toLowerCase()} stories from The Good in Us. Positive reporting that inspires hope.`;
 
   return {
-    title: `${categoryName} News | The Good in Us`,
+    title:
+      slug === "reddit"
+        ? "Reddit Good News | The Good in Us"
+        : `${categoryName} News | The Good in Us`,
     description,
     alternates: {
       canonical: `${siteUrl}/category/${slug}`,
     },
     openGraph: {
-      title: `${categoryName} News | The Good in Us`,
+      title:
+        slug === "reddit"
+          ? "Reddit Good News | The Good in Us"
+          : `${categoryName} News | The Good in Us`,
       description,
       url: `${siteUrl}/category/${slug}`,
       siteName: "The Good in Us",
@@ -105,7 +124,10 @@ export async function generateMetadata({
     },
     twitter: {
       card: "summary_large_image",
-      title: `${categoryName} News | The Good in Us`,
+      title:
+        slug === "reddit"
+          ? "Reddit Good News | The Good in Us"
+          : `${categoryName} News | The Good in Us`,
       description,
       images: [`${siteUrl}/og-image.jpg`],
     },
@@ -119,6 +141,7 @@ export async function generateMetadata({
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = await params;
   const categoryName = formatCategoryName(slug);
+  const isRedditCategory = slug === "reddit";
 
   const { data } = await supabase
     .from("stories")
@@ -131,7 +154,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
   return (
     <main style={{ maxWidth: 900, margin: "auto", padding: 40 }}>
-      <h1 style={{ marginBottom: 8 }}>{categoryName} News</h1>
+      <h1 style={{ marginBottom: 8 }}>
+        {isRedditCategory ? "Reddit Good News" : `${categoryName} News`}
+      </h1>
 
       <p
         style={{
@@ -142,9 +167,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           lineHeight: 1.7,
         }}
       >
-        Discover uplifting {categoryName.toLowerCase()} stories from around the
-        world. The Good in Us highlights positive news, hopeful moments, and
-        meaningful progress.
+        {isRedditCategory
+          ? "Uplifting posts from Reddit communities, curated with attribution and links back to the original discussions."
+          : `Discover uplifting ${categoryName.toLowerCase()} stories from around the world. The Good in Us highlights positive news, hopeful moments, and meaningful progress.`}
       </p>
 
       <div
@@ -172,6 +197,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 display: "block",
                 color: "inherit",
                 textDecoration: "none",
+                border: story.is_reddit_post ? "1px solid #e5e7eb" : "none",
               }}
             >
               {displayImage ? (
@@ -179,6 +205,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                   <img
                     src={displayImage}
                     alt={story.title}
+                    loading="lazy"
                     style={{
                       width: "100%",
                       height: 160,
@@ -186,6 +213,24 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                       display: "block",
                     }}
                   />
+
+                  {story.is_reddit_post ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 10,
+                        top: 10,
+                        borderRadius: 999,
+                        background: "rgba(17, 24, 39, 0.86)",
+                        color: "#ffffff",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: "5px 9px",
+                      }}
+                    >
+                      Reddit
+                    </div>
+                  ) : null}
 
                   {story.video_url ? (
                     <div
@@ -224,14 +269,16 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                   style={{
                     width: "100%",
                     height: 160,
-                    background: "#f1f5f9",
+                    background: story.is_reddit_post
+                      ? "linear-gradient(135deg, #fff7ed, #fef3c7)"
+                      : "#f1f5f9",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     fontSize: 32,
                   }}
                 >
-                  🌤️
+                  {story.is_reddit_post ? "💬" : "🌤️"}
                 </div>
               )}
 
@@ -242,11 +289,11 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                     fontWeight: 700,
                     textTransform: "uppercase",
                     letterSpacing: "0.08em",
-                    color: "#059669",
+                    color: story.is_reddit_post ? "#ea580c" : "#059669",
                     marginBottom: 6,
                   }}
                 >
-                  {formatCategoryName(story.category_slug)}
+                  {getCardLabel(story)}
                   {story.video_url ? " • Video" : ""}
                 </div>
 

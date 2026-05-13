@@ -8,8 +8,7 @@ export const maxDuration = 60;
 
 const supabase = createAdminClient();
 
-const IMPORTER_VERSION = "reddit-rss-import-v1";
-
+const IMPORTER_VERSION = "reddit-rss-import-v2-media";
 const SUBREDDIT = "MadeMeSmile";
 const REDDIT_RSS_URL = `https://www.reddit.com/r/${SUBREDDIT}/top/.rss?t=day`;
 
@@ -114,14 +113,10 @@ function stripHtml(html = "") {
     .trim();
 }
 
-function extractFirstImage(content = "") {
-  const imageMatch =
-    content.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] ||
-    content.match(/href=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']/i)?.[1];
+function cleanUrl(value: string | null | undefined) {
+  if (!value) return null;
 
-  if (!imageMatch) return null;
-
-  const cleaned = decodeHtmlEntities(imageMatch.trim());
+  const cleaned = decodeHtmlEntities(value.trim());
 
   if (!/^https?:\/\//i.test(cleaned)) return null;
   if (/avatar|icon|logo|sprite|1x1|pixel/i.test(cleaned)) return null;
@@ -129,23 +124,40 @@ function extractFirstImage(content = "") {
   return cleaned;
 }
 
-function extractVideoUrl(content = "", link = "") {
-  const decodedContent = decodeHtmlEntities(content);
+function extractFirstImage(content = "") {
+  const decoded = decodeHtmlEntities(content);
 
-  const directVideo =
-    decodedContent.match(/https?:\/\/v\.redd\.it\/[a-z0-9]+/i)?.[0] ||
-    decodedContent.match(/https?:\/\/[^"'\s<>]+\.mp4[^"'\s<>]*/i)?.[0];
+  const candidates = [
+    decoded.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1],
+    decoded.match(/href=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']/i)?.[1],
+    decoded.match(/https?:\/\/i\.redd\.it\/[^"'\s<>]+/i)?.[0],
+    decoded.match(/https?:\/\/preview\.redd\.it\/[^"'\s<>]+/i)?.[0],
+    decoded.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp)(?:\?[^"'\s<>]*)?/i)?.[0],
+  ];
 
-  if (directVideo) return directVideo;
+  for (const candidate of candidates) {
+    const cleaned = cleanUrl(candidate);
+    if (cleaned) return cleaned;
+  }
 
-  const externalVideo =
-    decodedContent.match(/https?:\/\/(?:www\.)?youtube\.com\/watch\?v=[^"'\s<>]+/i)?.[0] ||
-    decodedContent.match(/https?:\/\/youtu\.be\/[^"'\s<>]+/i)?.[0] ||
-    decodedContent.match(/https?:\/\/(?:www\.)?vimeo\.com\/[^"'\s<>]+/i)?.[0];
+  return null;
+}
 
-  if (externalVideo) return externalVideo;
+function extractVideoUrl(content = "") {
+  const decoded = decodeHtmlEntities(content);
 
-  if (/\/comments\//i.test(link)) return null;
+  const candidates = [
+    decoded.match(/https?:\/\/[^"'\s<>]+\.mp4[^"'\s<>]*/i)?.[0],
+    decoded.match(/https?:\/\/v\.redd\.it\/[a-z0-9]+/i)?.[0],
+    decoded.match(/https?:\/\/(?:www\.)?youtube\.com\/watch\?v=[^"'\s<>]+/i)?.[0],
+    decoded.match(/https?:\/\/youtu\.be\/[^"'\s<>]+/i)?.[0],
+    decoded.match(/https?:\/\/(?:www\.)?vimeo\.com\/[^"'\s<>]+/i)?.[0],
+  ];
+
+  for (const candidate of candidates) {
+    const cleaned = cleanUrl(candidate);
+    if (cleaned) return cleaned;
+  }
 
   return null;
 }
@@ -229,7 +241,7 @@ export async function GET() {
       }
 
       const imageUrl = extractFirstImage(rawContent);
-      const videoUrl = extractVideoUrl(rawContent, link);
+      const videoUrl = extractVideoUrl(rawContent);
 
       if (!imageUrl && !videoUrl) {
         skipped += 1;
@@ -304,8 +316,6 @@ export async function GET() {
       logs.push(`Saved "${title}"`);
 
       if (saved >= MIN_IMPORT_COUNT) {
-        // Keep RSS import conservative for now.
-        // Remove this break later if you want more Reddit posts per run.
         break;
       }
     }
