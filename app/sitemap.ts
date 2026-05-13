@@ -10,7 +10,14 @@ type StorySitemapRow = {
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
 
-const CATEGORY_SLUGS = ["kindness", "community", "animals", "health", "hope"];
+const CATEGORY_SLUGS = [
+  "kindness",
+  "community",
+  "animals",
+  "health",
+  "hope",
+  "reddit",
+];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
