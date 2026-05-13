@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net"
+    process.env.NEXT_PUBLIC_SITE_URL || "https://www.thegoodinus.net"
   ),
   title: {
     default: "The Good in Us",
@@ -87,10 +87,16 @@ export default function RootLayout({
               </Link>
 
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                <Link href="/stories" style={{ textDecoration: "none", color: "#111827" }}>
+                <Link
+                  href="/stories"
+                  style={{ textDecoration: "none", color: "#111827" }}
+                >
                   Stories
                 </Link>
-                <Link href="/submit" style={{ textDecoration: "none", color: "#111827" }}>
+                <Link
+                  href="/submit"
+                  style={{ textDecoration: "none", color: "#111827" }}
+                >
                   Submit
                 </Link>
               </div>
@@ -104,20 +110,41 @@ export default function RootLayout({
                 fontSize: 14,
               }}
             >
-              <Link href="/category/kindness" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/kindness"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Kindness
               </Link>
-              <Link href="/category/community" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/community"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Community
               </Link>
-              <Link href="/category/animals" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/animals"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Animals
               </Link>
-              <Link href="/category/health" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/health"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Health
               </Link>
-              <Link href="/category/hope" style={{ textDecoration: "none", color: "#4b5563" }}>
+              <Link
+                href="/category/hope"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
                 Hope
+              </Link>
+              <Link
+                href="/category/reddit"
+                style={{ textDecoration: "none", color: "#4b5563" }}
+              >
+                Reddit
               </Link>
             </div>
           </nav>
