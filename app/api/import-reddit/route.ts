@@ -130,14 +130,30 @@ function extractFirstImage(content = "") {
   const candidates = [
     decoded.match(/https?:\/\/i\.redd\.it\/[^"'\s<>]+/i)?.[0],
     decoded.match(/https?:\/\/preview\.redd\.it\/[^"'\s<>]+/i)?.[0],
-    decoded.match(/href=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']/i)?.[1],
-    decoded.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp)(?:\?[^"'\s<>]*)?/i)?.[0],
+    decoded.match(
+      /href=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']/i
+    )?.[1],
+    decoded.match(
+      /https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp)(?:\?[^"'\s<>]*)?/i
+    )?.[0],
     decoded.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1],
   ];
 
   for (const candidate of candidates) {
     const cleaned = cleanUrl(candidate);
-    if (cleaned) return cleaned;
+
+    if (!cleaned) continue;
+
+    const upgraded = cleaned
+      .replace(/&amp;/g, "&")
+      .replace(/\?width=\d+&amp;format=\w+&amp;auto=webp[^"'\s<>]*/i, "")
+      .replace(/\?width=\d+&format=\w+&auto=webp[^"'\s<>]*/i, "");
+
+    if (upgraded.includes("preview.redd.it")) {
+      return upgraded.replace("preview.redd.it", "i.redd.it").split("?")[0];
+    }
+
+    return upgraded;
   }
 
   return null;
