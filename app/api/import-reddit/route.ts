@@ -8,12 +8,12 @@ export const maxDuration = 60;
 
 const supabase = createAdminClient();
 
-const IMPORTER_VERSION = "reddit-rss-import-v2-media";
+const IMPORTER_VERSION = "reddit-rss-import-v3-more-posts";
 const SUBREDDIT = "MadeMeSmile";
 const REDDIT_RSS_URL = `https://www.reddit.com/r/${SUBREDDIT}/top/.rss?t=day`;
 
-const MIN_IMPORT_COUNT = 1;
-const MAX_ITEMS_TO_CHECK = 15;
+const MAX_IMPORT_COUNT = 5;
+const MAX_ITEMS_TO_CHECK = 25;
 
 type RedditFeedItem = {
   title?: string;
@@ -321,7 +321,7 @@ export async function GET() {
       saved += 1;
       logs.push(`Saved "${title}"`);
 
-      if (saved >= MIN_IMPORT_COUNT) {
+      if (saved >= MAX_IMPORT_COUNT) {
         break;
       }
     }

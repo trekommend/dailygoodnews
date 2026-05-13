@@ -89,13 +89,22 @@ function getCardLabel(story: StoryCard) {
   return formatCategoryName(story.category_slug);
 }
 
+function getExcerpt(story: StoryCard) {
+  if (story.is_reddit_post) {
+    return "A feel-good Reddit post curated from r/MadeMeSmile.";
+  }
+
+  return stripHtml(story.summary || story.content || "").slice(0, 120);
+}
+
 export async function generateMetadata({
   params,
 }: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params;
 
   const categoryName = formatCategoryName(slug);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.thegoodinus.net";
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || "https://www.thegoodinus.net";
 
   const description =
     slug === "reddit"
@@ -183,7 +192,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         {stories.map((story) => {
           const videoThumbnail = getVideoThumbnail(story.video_url);
           const displayImage = videoThumbnail || story.image_url;
-          const excerpt = stripHtml(story.summary || story.content || "").slice(0, 120);
+          const excerpt = getExcerpt(story);
 
           return (
             <Link
@@ -193,11 +202,15 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 background: "white",
                 borderRadius: 12,
                 overflow: "hidden",
-                boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
+                boxShadow: story.is_reddit_post
+                  ? "0 8px 18px rgba(234, 88, 12, 0.10)"
+                  : "0 4px 10px rgba(0,0,0,0.05)",
                 display: "block",
                 color: "inherit",
                 textDecoration: "none",
-                border: story.is_reddit_post ? "1px solid #e5e7eb" : "none",
+                border: story.is_reddit_post
+                  ? "1px solid #fed7aa"
+                  : "none",
               }}
             >
               {displayImage ? (
@@ -208,7 +221,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                     loading="lazy"
                     style={{
                       width: "100%",
-                      height: 160,
+                      height: 180,
                       objectFit: "cover",
                       display: "block",
                     }}
@@ -221,14 +234,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                         left: 10,
                         top: 10,
                         borderRadius: 999,
-                        background: "rgba(17, 24, 39, 0.86)",
+                        background: "rgba(234, 88, 12, 0.94)",
                         color: "#ffffff",
                         fontSize: 12,
-                        fontWeight: 700,
-                        padding: "5px 9px",
+                        fontWeight: 800,
+                        padding: "5px 10px",
                       }}
                     >
-                      Reddit
+                      From Reddit
                     </div>
                   ) : null}
 
@@ -268,7 +281,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 <div
                   style={{
                     width: "100%",
-                    height: 160,
+                    height: 180,
                     background: story.is_reddit_post
                       ? "linear-gradient(135deg, #fff7ed, #fef3c7)"
                       : "#f1f5f9",
@@ -286,7 +299,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 <div
                   style={{
                     fontSize: 12,
-                    fontWeight: 700,
+                    fontWeight: 800,
                     textTransform: "uppercase",
                     letterSpacing: "0.08em",
                     color: story.is_reddit_post ? "#ea580c" : "#059669",
