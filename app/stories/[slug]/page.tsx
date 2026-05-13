@@ -62,6 +62,7 @@ function truncateForMeta(text: string, maxLength = 160) {
   }
 
   const lastSpace = sliced.lastIndexOf(" ");
+
   if (lastSpace > 80) {
     return `${sliced.slice(0, lastSpace).trim()}...`;
   }
@@ -73,6 +74,7 @@ function formatReadableDate(dateString: string | null) {
   if (!dateString) return null;
 
   const date = new Date(dateString);
+
   if (Number.isNaN(date.getTime())) return null;
 
   return date.toLocaleDateString("en-US", {
@@ -106,6 +108,7 @@ function getVideoEmbedUrl(value: string | null | undefined) {
       }
 
       const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
+
       if (shortsMatch?.[1]) {
         return `https://www.youtube.com/embed/${shortsMatch[1]}`;
       }
@@ -133,13 +136,30 @@ function getVideoEmbedUrl(value: string | null | undefined) {
   }
 }
 
+function getDirectVideoUrl(value: string | null | undefined) {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+
+    if (/\.mp4($|\?)/i.test(url.href)) {
+      return url.href;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMetadata({
   params,
 }: StoryPageProps): Promise<Metadata> {
   const { slug } = await params;
   const story = await getStory(slug);
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
 
   if (!story) {
     return {
@@ -149,11 +169,16 @@ export async function generateMetadata({
   }
 
   const cleanText = cleanTextForMeta(story.summary ?? story.content ?? "");
+
   const description =
-    truncateForMeta(cleanText) || "A positive news story from The Good in Us.";
+    truncateForMeta(cleanText) ||
+    "A positive news story from The Good in Us.";
 
   const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
-  const ogImage = story.image_url ? story.image_url : `${siteUrl}/og-image.jpg`;
+
+  const ogImage = story.image_url
+    ? story.image_url
+    : `${siteUrl}/og-image.jpg`;
 
   return {
     title: `${story.title} – Positive News | The Good in Us`,
@@ -183,7 +208,8 @@ export default async function StoryPage({ params }: StoryPageProps) {
   const { slug } = await params;
   const story = await getStory(slug);
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
 
   if (!story) {
     return (
@@ -195,10 +221,18 @@ export default async function StoryPage({ params }: StoryPageProps) {
   }
 
   const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
-  const imageUrl = story.image_url ? story.image_url : `${siteUrl}/og-image.jpg`;
+
+  const imageUrl = story.image_url
+    ? story.image_url
+    : `${siteUrl}/og-image.jpg`;
+
   const formattedDate = formatReadableDate(story.publish_date);
+
   const categoryName = formatCategoryName(story.category_slug);
+
   const videoEmbedUrl = getVideoEmbedUrl(story.video_url);
+
+  const directVideoUrl = getDirectVideoUrl(story.video_url);
 
   const authorName =
     story.is_reader_submission && story.submitted_by_name
@@ -206,7 +240,9 @@ export default async function StoryPage({ params }: StoryPageProps) {
       : "The Good in Us";
 
   const cleanSummary = cleanTextForMeta(story.summary ?? "");
+
   const cleanContent = cleanTextForMeta(story.content ?? "");
+
   const description =
     truncateForMeta(cleanSummary || cleanContent) ||
     "A positive news story from The Good in Us.";
@@ -255,7 +291,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
         thumbnailUrl: [imageUrl],
         uploadDate: story.publish_date,
         contentUrl: story.video_url,
-        embedUrl: videoEmbedUrl || story.video_url,
+        embedUrl: videoEmbedUrl || directVideoUrl || story.video_url,
         publisher: {
           "@type": "Organization",
           name: "The Good in Us",
@@ -299,24 +335,24 @@ export default async function StoryPage({ params }: StoryPageProps) {
           }}
         >
           {story.title}
-          
         </h1>
-        {/* ✅ REDDIT ATTRIBUTION */}
-{story.is_reddit_post && (
-  <div
-    style={{
-      marginTop: 8,
-      marginBottom: 12,
-      padding: "10px 14px",
-      background: "#f3f4f6",
-      borderRadius: 8,
-      fontSize: 14,
-      color: "#374151",
-    }}
-  >
-    Originally shared on Reddit in r/{story.reddit_subreddit}
-  </div>
-)}
+
+        {story.is_reddit_post ? (
+          <div
+            style={{
+              marginTop: 8,
+              marginBottom: 12,
+              padding: "10px 14px",
+              background: "#f3f4f6",
+              borderRadius: 8,
+              fontSize: 14,
+              color: "#374151",
+            }}
+          >
+            Originally shared on Reddit
+            {story.reddit_subreddit ? ` in r/${story.reddit_subreddit}` : ""}.
+          </div>
+        ) : null}
 
         {story.source_name ? (
           <p style={{ color: "#6b7280", fontSize: 14, marginTop: 0 }}>
@@ -325,7 +361,21 @@ export default async function StoryPage({ params }: StoryPageProps) {
         ) : null}
       </div>
 
-      {videoEmbedUrl ? (
+      {directVideoUrl ? (
+        <video
+          src={directVideoUrl}
+          controls
+          playsInline
+          poster={story.image_url || undefined}
+          style={{
+            width: "100%",
+            maxHeight: 520,
+            borderRadius: 20,
+            background: "#000",
+            margin: "20px 0 28px",
+          }}
+        />
+      ) : videoEmbedUrl ? (
         <div
           style={{
             aspectRatio: "16 / 9",
@@ -398,8 +448,13 @@ export default async function StoryPage({ params }: StoryPageProps) {
         }}
       >
         {story.source_url && story.source_name ? (
-          <div style={{ marginBottom: story.is_reader_submission && story.submitted_by_name ? 8 : 0 }}>
-            Originally published on{" "}
+          <div
+            style={{
+              marginBottom:
+                story.is_reader_submission && story.submitted_by_name ? 8 : 0,
+            }}
+          >
+            {story.is_reddit_post ? "Originally shared on " : "Originally published on "}
             <a
               href={story.source_url}
               target="_blank"
@@ -423,27 +478,27 @@ export default async function StoryPage({ params }: StoryPageProps) {
           </div>
         ) : null}
       </div>
-      {/* ✅ REDDIT CTA */}
-{story.is_reddit_post && story.source_url && (
-  <div style={{ marginTop: 24 }}>
-    <a
-      href={story.source_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{
-        display: "inline-block",
-        padding: "10px 16px",
-        background: "#111827",
-        color: "#ffffff",
-        borderRadius: 6,
-        textDecoration: "none",
-        fontSize: 14,
-      }}
-    >
-      View discussion on Reddit
-    </a>
-  </div>
-)}
+
+      {story.is_reddit_post && story.source_url ? (
+        <div style={{ marginTop: 24 }}>
+          <a
+            href={story.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-block",
+              padding: "10px 16px",
+              background: "#111827",
+              color: "#ffffff",
+              borderRadius: 6,
+              textDecoration: "none",
+              fontSize: 14,
+            }}
+          >
+            View discussion on Reddit
+          </a>
+        </div>
+      ) : null}
 
       {related.length > 0 ? (
         <section
