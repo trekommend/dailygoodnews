@@ -163,6 +163,7 @@ export default async function HomePage() {
       "id, title, slug, summary, image_url, video_url, category_slug, publish_date, created_at, featured, story_score, source_url"
     )
     .not("slug", "is", null)
+      .eq("is_reddit_post", false)
     .order("publish_date", { ascending: false })
     .limit(60);
 
