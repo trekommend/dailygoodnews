@@ -20,6 +20,8 @@ type Story = {
   publish_date: string | null;
   is_reader_submission?: boolean | null;
   submitted_by_name?: string | null;
+  is_reddit_post?: boolean | null;
+  reddit_subreddit?: string | null;
 };
 
 type RelatedStory = {
@@ -297,7 +299,24 @@ export default async function StoryPage({ params }: StoryPageProps) {
           }}
         >
           {story.title}
+          
         </h1>
+        {/* ✅ REDDIT ATTRIBUTION */}
+{story.is_reddit_post && (
+  <div
+    style={{
+      marginTop: 8,
+      marginBottom: 12,
+      padding: "10px 14px",
+      background: "#f3f4f6",
+      borderRadius: 8,
+      fontSize: 14,
+      color: "#374151",
+    }}
+  >
+    Originally shared on Reddit in r/{story.reddit_subreddit}
+  </div>
+)}
 
         {story.source_name ? (
           <p style={{ color: "#6b7280", fontSize: 14, marginTop: 0 }}>
@@ -404,6 +423,27 @@ export default async function StoryPage({ params }: StoryPageProps) {
           </div>
         ) : null}
       </div>
+      {/* ✅ REDDIT CTA */}
+{story.is_reddit_post && story.source_url && (
+  <div style={{ marginTop: 24 }}>
+    <a
+      href={story.source_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: "inline-block",
+        padding: "10px 16px",
+        background: "#111827",
+        color: "#ffffff",
+        borderRadius: 6,
+        textDecoration: "none",
+        fontSize: 14,
+      }}
+    >
+      View discussion on Reddit
+    </a>
+  </div>
+)}
 
       {related.length > 0 ? (
         <section
