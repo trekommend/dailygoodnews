@@ -337,24 +337,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
           {story.title}
         </h1>
 
-        {story.is_reddit_post ? (
-          <div
-            style={{
-              marginTop: 8,
-              marginBottom: 12,
-              padding: "10px 14px",
-              background: "#f3f4f6",
-              borderRadius: 8,
-              fontSize: 14,
-              color: "#374151",
-            }}
-          >
-            Originally shared on Reddit
-            {story.reddit_subreddit ? ` in r/${story.reddit_subreddit}` : ""}.
-          </div>
-        ) : null}
-
-        {story.source_name ? (
+{story.source_name && !story.is_reddit_post ? (
           <p style={{ color: "#6b7280", fontSize: 14, marginTop: 0 }}>
             Originally published on {story.source_name}
           </p>
@@ -412,19 +395,19 @@ export default async function StoryPage({ params }: StoryPageProps) {
         />
       ) : null}
 
-      {story.summary ? (
-        <p
-          style={{
-            fontSize: 18,
-            lineHeight: 1.8,
-            color: "#475569",
-          }}
-        >
-          {cleanTextForMeta(story.summary)}
-        </p>
-      ) : null}
+      {story.summary && !story.is_reddit_post ? (
+  <p
+    style={{
+      fontSize: 18,
+      lineHeight: 1.8,
+      color: "#475569",
+    }}
+  >
+    {cleanTextForMeta(story.summary)}
+  </p>
+) : null}
 
-      {story.content ? (
+{story.content && !story.is_reddit_post ? (
         <div
           style={{
             fontSize: 18,
@@ -447,7 +430,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
           lineHeight: 1.6,
         }}
       >
-        {story.source_url && story.source_name ? (
+{story.source_url && story.source_name && !story.is_reddit_post ? (
           <div
             style={{
               marginBottom:
