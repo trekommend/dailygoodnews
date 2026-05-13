@@ -355,7 +355,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
             maxHeight: 520,
             borderRadius: 20,
             background: "#000",
-            margin: "20px 0 28px",
+            margin: story.is_reddit_post ? "20px 0 12px" : "20px 0 28px",
           }}
         />
       ) : videoEmbedUrl ? (
@@ -366,7 +366,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
             overflow: "hidden",
             borderRadius: 20,
             background: "#000",
-            margin: "20px 0 28px",
+            margin: story.is_reddit_post ? "20px 0 12px" : "20px 0 28px",
           }}
         >
           <iframe
@@ -390,7 +390,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
             maxHeight: 420,
             objectFit: "cover",
             borderRadius: 20,
-            margin: "20px 0 28px",
+            margin: story.is_reddit_post ? "20px 0 12px" : "20px 0 28px",
           }}
         />
       ) : null}
