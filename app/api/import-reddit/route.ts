@@ -128,11 +128,11 @@ function extractFirstImage(content = "") {
   const decoded = decodeHtmlEntities(content);
 
   const candidates = [
-    decoded.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1],
-    decoded.match(/href=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']/i)?.[1],
     decoded.match(/https?:\/\/i\.redd\.it\/[^"'\s<>]+/i)?.[0],
     decoded.match(/https?:\/\/preview\.redd\.it\/[^"'\s<>]+/i)?.[0],
+    decoded.match(/href=["']([^"']+\.(?:jpg|jpeg|png|webp)(?:\?[^"']*)?)["']/i)?.[1],
     decoded.match(/https?:\/\/[^"'\s<>]+\.(?:jpg|jpeg|png|webp)(?:\?[^"'\s<>]*)?/i)?.[0],
+    decoded.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1],
   ];
 
   for (const candidate of candidates) {
@@ -272,17 +272,7 @@ export async function GET() {
         title,
         slug,
         summary,
-        content: `
-          <p>
-            Originally shared on Reddit in r/${SUBREDDIT}.
-          </p>
-
-          <p>
-            <a href="${link}" target="_blank" rel="noopener noreferrer">
-              View original Reddit thread
-            </a>
-          </p>
-        `,
+        content: null,
         image_url: imageUrl,
         video_url: videoUrl,
         source_url: link,
