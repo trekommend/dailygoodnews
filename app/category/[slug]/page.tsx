@@ -91,7 +91,9 @@ function getCardLabel(story: StoryCard) {
 
 function getExcerpt(story: StoryCard) {
   if (story.is_reddit_post) {
-    return "A feel-good Reddit post curated from r/MadeMeSmile.";
+    return story.video_url
+      ? "A feel-good Reddit video curated from r/MadeMeSmile."
+      : "A feel-good Reddit post curated from r/MadeMeSmile.";
   }
 
   return stripHtml(story.summary || story.content || "").slice(0, 120);
@@ -192,6 +194,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         {stories.map((story) => {
           const videoThumbnail = getVideoThumbnail(story.video_url);
           const displayImage = videoThumbnail || story.image_url;
+          const isVideoOnly = Boolean(story.video_url && !displayImage);
           const excerpt = getExcerpt(story);
 
           return (
@@ -200,7 +203,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               href={`/stories/${story.slug}`}
               style={{
                 background: "white",
-                borderRadius: 12,
+                borderRadius: 14,
                 overflow: "hidden",
                 boxShadow: story.is_reddit_post
                   ? "0 8px 18px rgba(234, 88, 12, 0.10)"
@@ -208,9 +211,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 display: "block",
                 color: "inherit",
                 textDecoration: "none",
-                border: story.is_reddit_post
-                  ? "1px solid #fed7aa"
-                  : "none",
+                border: story.is_reddit_post ? "1px solid #fed7aa" : "none",
               }}
             >
               {displayImage ? (
@@ -283,15 +284,46 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                     width: "100%",
                     height: 180,
                     background: story.is_reddit_post
-                      ? "linear-gradient(135deg, #fff7ed, #fef3c7)"
+                      ? "linear-gradient(135deg, #fff7ed, #fed7aa)"
                       : "#f1f5f9",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: 32,
+                    flexDirection: "column",
+                    gap: 8,
+                    color: "#9a3412",
+                    textAlign: "center",
+                    padding: 18,
+                    boxSizing: "border-box",
                   }}
                 >
-                  {story.is_reddit_post ? "💬" : "🌤️"}
+                  <div
+                    style={{
+                      width: 54,
+                      height: 54,
+                      borderRadius: "999px",
+                      background: "#ffffff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 24,
+                      fontWeight: 900,
+                      boxShadow: "0 6px 14px rgba(154, 52, 18, 0.16)",
+                    }}
+                  >
+                    {isVideoOnly ? "▶" : story.is_reddit_post ? "💬" : "🌤️"}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    {isVideoOnly ? "Reddit Video" : "Reddit Post"}
+                  </div>
                 </div>
               )}
 
