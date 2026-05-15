@@ -234,6 +234,18 @@ export default async function StoryPage({ params }: StoryPageProps) {
 
   const directVideoUrl = getDirectVideoUrl(story.video_url);
 
+  const isRedditVideoPost = Boolean(story.is_reddit_post && story.video_url);
+
+  const showFooterAttribution = Boolean(
+    story.source_url &&
+      story.source_name &&
+      !story.is_reddit_post
+  );
+
+  const showSubmittedBy = Boolean(
+    story.is_reader_submission && story.submitted_by_name
+  );
+
   const authorName =
     story.is_reader_submission && story.submitted_by_name
       ? story.submitted_by_name
@@ -291,7 +303,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
         thumbnailUrl: [imageUrl],
         uploadDate: story.publish_date,
         contentUrl: story.video_url,
-        embedUrl: videoEmbedUrl || directVideoUrl || story.video_url,
+        embedUrl: videoEmbedUrl || directVideoUrl || story.source_url || story.video_url,
         publisher: {
           "@type": "Organization",
           name: "The Good in Us",
@@ -337,14 +349,86 @@ export default async function StoryPage({ params }: StoryPageProps) {
           {story.title}
         </h1>
 
-{story.source_name && !story.is_reddit_post ? (
+        {story.source_name && !story.is_reddit_post ? (
           <p style={{ color: "#6b7280", fontSize: 14, marginTop: 0 }}>
             Originally published on {story.source_name}
           </p>
         ) : null}
       </div>
 
-      {directVideoUrl ? (
+      {isRedditVideoPost ? (
+        <div
+          style={{
+            width: "100%",
+            minHeight: 320,
+            borderRadius: 20,
+            background: story.image_url
+              ? `linear-gradient(rgba(15, 23, 42, 0.32), rgba(15, 23, 42, 0.52)), url(${story.image_url}) center / cover`
+              : "linear-gradient(135deg, #fff7ed, #fed7aa)",
+            margin: "20px 0 12px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 28,
+            boxSizing: "border-box",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              background: "rgba(255, 255, 255, 0.94)",
+              borderRadius: 18,
+              padding: "22px 24px",
+              maxWidth: 420,
+              boxShadow: "0 10px 24px rgba(15, 23, 42, 0.16)",
+            }}
+          >
+            <div
+              style={{
+                width: 58,
+                height: 58,
+                borderRadius: "999px",
+                background: "#111827",
+                color: "#ffffff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 24,
+                fontWeight: 900,
+                margin: "0 auto 14px",
+                paddingLeft: 4,
+              }}
+            >
+              ▶
+            </div>
+
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "#ea580c",
+                marginBottom: 8,
+              }}
+            >
+              Reddit Video
+            </div>
+
+            <p
+              style={{
+                margin: 0,
+                color: "#374151",
+                fontSize: 15,
+                lineHeight: 1.6,
+              }}
+            >
+              This video is hosted on Reddit. Open the original discussion to
+              watch it there.
+            </p>
+          </div>
+        </div>
+      ) : directVideoUrl ? (
         <video
           src={directVideoUrl}
           controls
@@ -396,18 +480,18 @@ export default async function StoryPage({ params }: StoryPageProps) {
       ) : null}
 
       {story.summary && !story.is_reddit_post ? (
-  <p
-    style={{
-      fontSize: 18,
-      lineHeight: 1.8,
-      color: "#475569",
-    }}
-  >
-    {cleanTextForMeta(story.summary)}
-  </p>
-) : null}
+        <p
+          style={{
+            fontSize: 18,
+            lineHeight: 1.8,
+            color: "#475569",
+          }}
+        >
+          {cleanTextForMeta(story.summary)}
+        </p>
+      ) : null}
 
-{story.content && !story.is_reddit_post ? (
+      {story.content && !story.is_reddit_post ? (
         <div
           style={{
             fontSize: 18,
@@ -420,47 +504,48 @@ export default async function StoryPage({ params }: StoryPageProps) {
         />
       ) : null}
 
-      <div
-        style={{
-          marginTop: 36,
-          paddingTop: 20,
-          borderTop: "1px solid #e2e8f0",
-          color: "#475569",
-          fontSize: 15,
-          lineHeight: 1.6,
-        }}
-      >
-{story.source_url && story.source_name && !story.is_reddit_post ? (
-          <div
-            style={{
-              marginBottom:
-                story.is_reader_submission && story.submitted_by_name ? 8 : 0,
-            }}
-          >
-            {story.is_reddit_post ? "Originally shared on " : "Originally published on "}
-            <a
-              href={story.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
+      {showFooterAttribution || showSubmittedBy ? (
+        <div
+          style={{
+            marginTop: 36,
+            paddingTop: 20,
+            borderTop: "1px solid #e2e8f0",
+            color: "#475569",
+            fontSize: 15,
+            lineHeight: 1.6,
+          }}
+        >
+          {showFooterAttribution ? (
+            <div
               style={{
-                color: "#0f172a",
-                fontWeight: 600,
-                textDecoration: "underline",
+                marginBottom: showSubmittedBy ? 8 : 0,
               }}
             >
-              {story.source_name}
-            </a>
-            .
-          </div>
-        ) : null}
+              Originally published on{" "}
+              <a
+                href={story.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: "#0f172a",
+                  fontWeight: 600,
+                  textDecoration: "underline",
+                }}
+              >
+                {story.source_name}
+              </a>
+              .
+            </div>
+          ) : null}
 
-        {story.is_reader_submission && story.submitted_by_name ? (
-          <div>
-            Submitted by{" "}
-            <span style={{ fontWeight: 600 }}>{story.submitted_by_name}</span>
-          </div>
-        ) : null}
-      </div>
+          {showSubmittedBy ? (
+            <div>
+              Submitted by{" "}
+              <span style={{ fontWeight: 600 }}>{story.submitted_by_name}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {story.is_reddit_post && story.source_url ? (
         <div style={{ marginTop: 24 }}>
@@ -478,7 +563,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
               fontSize: 14,
             }}
           >
-            View discussion on Reddit
+            {isRedditVideoPost ? "Watch video on Reddit" : "View discussion on Reddit"}
           </a>
         </div>
       ) : null}
