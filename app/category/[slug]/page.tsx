@@ -192,10 +192,15 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         }}
       >
         {stories.map((story) => {
-          const videoThumbnail = getVideoThumbnail(story.video_url);
-          const displayImage = videoThumbnail || story.image_url;
-          const isVideoOnly = Boolean(story.video_url && !displayImage);
-          const excerpt = getExcerpt(story);
+  const isRedditVideo = Boolean(story.is_reddit_post && story.video_url);
+  const videoThumbnail = isRedditVideo
+    ? null
+    : getVideoThumbnail(story.video_url);
+  const displayImage = isRedditVideo
+    ? null
+    : videoThumbnail || story.image_url;
+  const isVideoOnly = Boolean(story.video_url && !displayImage);
+  const excerpt = getExcerpt(story);
 
           return (
             <Link
@@ -227,24 +232,6 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                       display: "block",
                     }}
                   />
-
-                  {story.is_reddit_post ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: 10,
-                        top: 10,
-                        borderRadius: 999,
-                        background: "rgba(234, 88, 12, 0.94)",
-                        color: "#ffffff",
-                        fontSize: 12,
-                        fontWeight: 800,
-                        padding: "5px 10px",
-                      }}
-                    >
-                      From Reddit
-                    </div>
-                  ) : null}
 
                   {story.video_url ? (
                     <div
