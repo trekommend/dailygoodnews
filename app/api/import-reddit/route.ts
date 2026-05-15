@@ -257,13 +257,15 @@ export async function GET() {
       }
 
       const imageUrl = extractFirstImage(rawContent);
-      const videoUrl = extractVideoUrl(rawContent);
+const videoUrl = extractVideoUrl(rawContent);
 
-      if (!imageUrl && !videoUrl) {
-        skipped += 1;
-        logs.push(`Skipped "${title}" (no image or video found in RSS)`);
-        continue;
-      }
+const hasUsableMedia = Boolean(imageUrl || videoUrl);
+
+if (!hasUsableMedia) {
+  skipped += 1;
+  logs.push(`Skipped "${title}" (no usable image or video found in RSS)`);
+  continue;
+}
 
       const { data: existing } = await supabase
         .from("stories")
