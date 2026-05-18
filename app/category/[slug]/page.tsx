@@ -146,17 +146,30 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   const categoryName = formatCategoryName(slug);
   const isRedditCategory = slug === "reddit";
 
-  const { data } = await supabase
-    .from("stories")
-    .select("*")
-    .eq("category_slug", slug)
-    .not("slug", "is", null)
-    .order("publish_date", { ascending: false });
+  let query = supabase
+  .from("stories")
+  .select("*")
+  .not("slug", "is", null)
+  .order("publish_date", { ascending: false });
+
+if (isRedditCategory) {
+  query = query.or("category_slug.eq.reddit,is_reader_submission.eq.true");
+} else {
+  query = query.eq("category_slug", slug);
+}
+
+const { data } = await query;
 
   const stories = (data || []) as StoryCard[];
 
   return (
-    <main style={{ maxWidth: 980, margin: "auto", padding: 40 }}>
+    <main
+  style={{
+    maxWidth: 980,
+    margin: "auto",
+    padding: "18px 40px 40px",
+  }}
+>
       <h1 style={{ marginBottom: 4 }}>
   {isRedditCategory ? "User Stories" : `${categoryName} News`}
 </h1>
