@@ -108,7 +108,7 @@ export async function generateMetadata({
   return {
     title:
       slug === "reddit"
-        ? "Reddit Good News | The Good in Us"
+        ? "User Stories | The Good in Us"
         : `${categoryName} News | The Good in Us`,
     description,
     alternates: {
