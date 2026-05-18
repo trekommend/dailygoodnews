@@ -59,17 +59,12 @@ function getVideoThumbnail(value: string | null | undefined) {
         url.pathname.match(/^\/shorts\/([^/?#]+)/)?.[1] ||
         url.pathname.match(/^\/embed\/([^/?#]+)/)?.[1];
 
-      if (videoId) {
-        return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-      }
+      if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     }
 
     if (host === "youtu.be") {
       const videoId = url.pathname.split("/").filter(Boolean)[0];
-
-      if (videoId) {
-        return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-      }
+      if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     }
 
     return null;
@@ -199,6 +194,10 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           const isVideoOnly = Boolean(story.video_url && !displayImage);
           const excerpt = getExcerpt(story);
 
+          const baseShadow = story.is_reddit_post
+            ? "0 10px 24px rgba(15, 23, 42, 0.08)"
+            : "0 4px 10px rgba(0,0,0,0.05)";
+
           return (
             <Link
               key={story.id}
@@ -207,15 +206,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 background: "white",
                 borderRadius: 16,
                 overflow: "hidden",
-                boxShadow: story.is_reddit_post
-                  ? "0 10px 24px rgba(15, 23, 42, 0.08)"
-                  : "0 4px 10px rgba(0,0,0,0.05)",
+                boxShadow: baseShadow,
                 display: "flex",
                 flexDirection: "column",
                 minHeight: 390,
                 color: "inherit",
                 textDecoration: "none",
                 border: story.is_reddit_post ? "1px solid #ffedd5" : "none",
+                transition: "transform 0.18s ease, box-shadow 0.18s ease",
               }}
             >
               {displayImage ? (
