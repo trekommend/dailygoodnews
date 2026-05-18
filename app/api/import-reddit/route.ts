@@ -257,7 +257,14 @@ export async function GET() {
       }
 
       const imageUrl = extractFirstImage(rawContent);
-const videoUrl = extractVideoUrl(rawContent);
+let videoUrl = extractVideoUrl(rawContent);
+
+// Detect Reddit-hosted video (even if no direct URL)
+const isRedditHostedVideo = /v\.redd\.it/i.test(rawContent);
+
+if (isRedditHostedVideo && !videoUrl) {
+  videoUrl = link; // use Reddit link as indicator ONLY
+}
 
 const hasUsableMedia = Boolean(imageUrl || videoUrl);
 
