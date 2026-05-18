@@ -144,7 +144,7 @@ export default function RootLayout({
                 href="/category/reddit"
                 style={{ textDecoration: "none", color: "#4b5563" }}
               >
-                Reddit
+                User Stories
               </Link>
             </div>
           </nav>

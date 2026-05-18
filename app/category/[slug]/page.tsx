@@ -157,23 +157,23 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
   return (
     <main style={{ maxWidth: 980, margin: "auto", padding: 40 }}>
-      <h1 style={{ marginBottom: 8 }}>
-        {isRedditCategory ? "Reddit Good News" : `${categoryName} News`}
-      </h1>
+      <h1 style={{ marginBottom: 4 }}>
+  {isRedditCategory ? "User Stories" : `${categoryName} News`}
+</h1>
 
       <p
-        style={{
-          marginTop: 0,
-          maxWidth: 720,
-          color: "#475569",
-          fontSize: 17,
-          lineHeight: 1.7,
-        }}
-      >
-        {isRedditCategory
-          ? "Uplifting Reddit posts curated with attribution and links back to the original discussions."
-          : `Discover uplifting ${categoryName.toLowerCase()} stories from around the world. The Good in Us highlights positive news, hopeful moments, and meaningful progress.`}
-      </p>
+  style={{
+    marginTop: 2,
+    maxWidth: 720,
+    color: "#475569",
+    fontSize: 17,
+    lineHeight: 1.7,
+  }}
+>
+  {isRedditCategory
+    ? "Uplifting stories from users across the internet."
+    : `Discover uplifting ${categoryName.toLowerCase()} stories from around the world. The Good in Us highlights positive news, hopeful moments, and meaningful progress.`}
+</p>
 
       <div
         style={{
