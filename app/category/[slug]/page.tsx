@@ -43,10 +43,7 @@ function formatCategoryName(slug?: string | null) {
 }
 
 function stripHtml(text: string) {
-  return text
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function getVideoThumbnail(value: string | null | undefined) {
@@ -83,7 +80,7 @@ function getVideoThumbnail(value: string | null | undefined) {
 
 function getCardLabel(story: StoryCard) {
   if (story.is_reddit_post) {
-    return `Reddit${story.reddit_subreddit ? ` / r/${story.reddit_subreddit}` : ""}`;
+    return story.reddit_subreddit ? `r/${story.reddit_subreddit}` : "Reddit";
   }
 
   return formatCategoryName(story.category_slug);
@@ -92,7 +89,7 @@ function getCardLabel(story: StoryCard) {
 function getExcerpt(story: StoryCard) {
   if (story.is_reddit_post) {
     return story.video_url
-      ? "A feel-good Reddit video curated from r/MadeMeSmile."
+      ? "Watch this feel-good Reddit video on the original thread."
       : "A feel-good Reddit post curated from r/MadeMeSmile.";
   }
 
@@ -164,7 +161,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   const stories = (data || []) as StoryCard[];
 
   return (
-    <main style={{ maxWidth: 900, margin: "auto", padding: 40 }}>
+    <main style={{ maxWidth: 980, margin: "auto", padding: 40 }}>
       <h1 style={{ marginBottom: 8 }}>
         {isRedditCategory ? "Reddit Good News" : `${categoryName} News`}
       </h1>
@@ -179,28 +176,28 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         }}
       >
         {isRedditCategory
-          ? "Uplifting posts from Reddit communities, curated with attribution and links back to the original discussions."
+          ? "Uplifting Reddit posts curated with attribution and links back to the original discussions."
           : `Discover uplifting ${categoryName.toLowerCase()} stories from around the world. The Good in Us highlights positive news, hopeful moments, and meaningful progress.`}
       </p>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-          gap: 20,
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 22,
           marginTop: 30,
         }}
       >
         {stories.map((story) => {
-  const isRedditVideo = Boolean(story.is_reddit_post && story.video_url);
-  const videoThumbnail = isRedditVideo
-    ? null
-    : getVideoThumbnail(story.video_url);
-  const displayImage = isRedditVideo
-    ? null
-    : videoThumbnail || story.image_url;
-  const isVideoOnly = Boolean(story.video_url && !displayImage);
-  const excerpt = getExcerpt(story);
+          const isRedditVideo = Boolean(story.is_reddit_post && story.video_url);
+          const videoThumbnail = isRedditVideo
+            ? null
+            : getVideoThumbnail(story.video_url);
+          const displayImage = isRedditVideo
+            ? null
+            : videoThumbnail || story.image_url;
+          const isVideoOnly = Boolean(story.video_url && !displayImage);
+          const excerpt = getExcerpt(story);
 
           return (
             <Link
@@ -208,15 +205,17 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               href={`/stories/${story.slug}`}
               style={{
                 background: "white",
-                borderRadius: 14,
+                borderRadius: 16,
                 overflow: "hidden",
                 boxShadow: story.is_reddit_post
-                  ? "0 8px 18px rgba(234, 88, 12, 0.10)"
+                  ? "0 10px 24px rgba(15, 23, 42, 0.08)"
                   : "0 4px 10px rgba(0,0,0,0.05)",
-                display: "block",
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 390,
                 color: "inherit",
                 textDecoration: "none",
-                border: story.is_reddit_post ? "1px solid #fed7aa" : "none",
+                border: story.is_reddit_post ? "1px solid #ffedd5" : "none",
               }}
             >
               {displayImage ? (
@@ -271,13 +270,13 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                     width: "100%",
                     height: 180,
                     background: story.is_reddit_post
-                      ? "linear-gradient(135deg, #fff7ed, #fed7aa)"
+                      ? "linear-gradient(135deg, #fff7ed, #ffedd5)"
                       : "#f1f5f9",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     flexDirection: "column",
-                    gap: 8,
+                    gap: 10,
                     color: "#9a3412",
                     textAlign: "center",
                     padding: 18,
@@ -286,8 +285,8 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 >
                   <div
                     style={{
-                      width: 54,
-                      height: 54,
+                      width: 56,
+                      height: 56,
                       borderRadius: "999px",
                       background: "#ffffff",
                       display: "flex",
@@ -295,7 +294,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                       justifyContent: "center",
                       fontSize: 24,
                       fontWeight: 900,
-                      boxShadow: "0 6px 14px rgba(154, 52, 18, 0.16)",
+                      boxShadow: "0 8px 18px rgba(154, 52, 18, 0.14)",
                     }}
                   >
                     {isVideoOnly ? "▶" : story.is_reddit_post ? "💬" : "🌤️"}
@@ -303,10 +302,10 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
                   <div
                     style={{
-                      fontSize: 13,
-                      fontWeight: 800,
+                      fontSize: 12,
+                      fontWeight: 900,
                       textTransform: "uppercase",
-                      letterSpacing: "0.08em",
+                      letterSpacing: "0.1em",
                     }}
                   >
                     {isVideoOnly ? "Reddit Video" : "Reddit Post"}
@@ -314,7 +313,14 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 </div>
               )}
 
-              <div style={{ padding: 18 }}>
+              <div
+                style={{
+                  padding: 18,
+                  display: "flex",
+                  flexDirection: "column",
+                  flex: 1,
+                }}
+              >
                 <div
                   style={{
                     fontSize: 12,
@@ -322,7 +328,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                     textTransform: "uppercase",
                     letterSpacing: "0.08em",
                     color: story.is_reddit_post ? "#ea580c" : "#059669",
-                    marginBottom: 6,
+                    marginBottom: 8,
                   }}
                 >
                   {getCardLabel(story)}
@@ -331,7 +337,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
                 <h2
                   style={{
-                    margin: "0 0 8px 0",
+                    margin: "0 0 10px 0",
                     fontSize: 18,
                     lineHeight: 1.3,
                   }}
@@ -343,7 +349,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                   style={{
                     color: "#555",
                     fontSize: 14,
-                    margin: "0 0 12px 0",
+                    margin: "0 0 16px 0",
                     lineHeight: 1.5,
                   }}
                 >
@@ -355,6 +361,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                   style={{
                     fontSize: 13,
                     color: "#6b7280",
+                    marginTop: "auto",
                   }}
                 >
                   {formatDate(story.publish_date)}
