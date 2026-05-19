@@ -141,7 +141,7 @@ export default function RootLayout({
                 Hope
               </Link>
               <Link
-                href="/category/reddit"
+                href="/category/user-stories"
                 style={{ textDecoration: "none", color: "#4b5563" }}
               >
                 User Stories

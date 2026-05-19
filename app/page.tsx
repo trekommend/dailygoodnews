@@ -14,10 +14,17 @@ type Story = {
   featured?: boolean | null;
   story_score?: number | null;
   source_url?: string | null;
+  is_reddit_post?: boolean | null;
+  is_reader_submission?: boolean | null;
+  reddit_subreddit?: string | null;
 };
 
 function formatCategory(category?: string | null) {
   if (!category) return "Hope";
+  if (category === "reddit" || category === "user-stories") {
+    return "User Stories";
+  }
+
   return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
@@ -96,6 +103,10 @@ function getYouTubeThumbnailUrl(videoUrl?: string | null) {
 }
 
 function getCardImageUrl(story: Story) {
+  if (story.is_reddit_post && story.video_url) {
+    return null;
+  }
+
   return story.image_url || getYouTubeThumbnailUrl(story.video_url);
 }
 
@@ -117,11 +128,26 @@ function shortSummary(summary?: string | null, maxLength = 150) {
     .trim()}...`;
 }
 
-function VideoFallbackPreview({
-  height,
-}: {
-  height: number | string;
-}) {
+function getCommunityLabel(story: Story) {
+  if (story.is_reader_submission) return "Community Story";
+  if (story.is_reddit_post && story.reddit_subreddit) {
+    return `r/${story.reddit_subreddit}`;
+  }
+
+  return "User Story";
+}
+
+function getCommunitySummary(story: Story) {
+  if (story.is_reddit_post) {
+    return story.video_url
+      ? "Watch this feel-good Reddit video on the original thread."
+      : "A feel-good Reddit post curated from r/MadeMeSmile.";
+  }
+
+  return shortSummary(story.summary, 135);
+}
+
+function VideoFallbackPreview({ height }: { height: number | string }) {
   return (
     <div
       style={{
@@ -156,16 +182,84 @@ function VideoFallbackPreview({
   );
 }
 
+function UserStoryFallbackPreview({
+  height,
+  isVideo,
+}: {
+  height: number | string;
+  isVideo: boolean;
+}) {
+  return (
+    <div
+      style={{
+        width: "100%",
+        height,
+        background: "linear-gradient(135deg, #fff7ed, #ffedd5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        gap: 10,
+        color: "#9a3412",
+        textAlign: "center",
+        padding: 18,
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          width: 54,
+          height: 54,
+          borderRadius: "999px",
+          background: "#ffffff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 24,
+          fontWeight: 900,
+          boxShadow: "0 8px 18px rgba(154, 52, 18, 0.14)",
+        }}
+      >
+        {isVideo ? "▶" : "💬"}
+      </div>
+
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 900,
+          textTransform: "uppercase",
+          letterSpacing: "0.1em",
+        }}
+      >
+        {isVideo ? "User Video" : "User Story"}
+      </div>
+    </div>
+  );
+}
+
 export default async function HomePage() {
   const { data, error } = await supabase
     .from("stories")
     .select(
-      "id, title, slug, summary, image_url, video_url, category_slug, publish_date, created_at, featured, story_score, source_url"
+      "id, title, slug, summary, image_url, video_url, category_slug, publish_date, created_at, featured, story_score, source_url, is_reddit_post, is_reader_submission, reddit_subreddit"
     )
     .not("slug", "is", null)
-      .eq("is_reddit_post", false)
+    .or("is_reddit_post.is.false,is_reddit_post.is.null")
+    .or("is_reader_submission.is.false,is_reader_submission.is.null")
     .order("publish_date", { ascending: false })
     .limit(60);
+
+  const { data: userStoriesData } = await supabase
+    .from("stories")
+    .select(
+      "id, title, slug, summary, image_url, video_url, category_slug, publish_date, created_at, featured, story_score, source_url, is_reddit_post, is_reader_submission, reddit_subreddit"
+    )
+    .not("slug", "is", null)
+    .or("category_slug.eq.reddit,is_reader_submission.eq.true")
+    .order("publish_date", { ascending: false })
+    .limit(2);
+
+  const userStories = (userStoriesData || []) as Story[];
 
   if (error) {
     return (
@@ -208,9 +302,7 @@ export default async function HomePage() {
       ? [...recentHeroCandidates].sort(
           (a, b) => getFeaturedRank(b) - getFeaturedRank(a)
         )[0]
-      : [...stories].sort(
-          (a, b) => getFeaturedRank(b) - getFeaturedRank(a)
-        )[0];
+      : [...stories].sort((a, b) => getFeaturedRank(b) - getFeaturedRank(a))[0];
 
   const featuredImageUrl = getCardImageUrl(featuredStory);
 
@@ -311,9 +403,7 @@ export default async function HomePage() {
             ) : null}
           </div>
         ) : featuredStory.video_url ? (
-          <VideoFallbackPreview
-            height="clamp(200px, 34vw, 360px)"
-          />
+          <VideoFallbackPreview height="clamp(200px, 34vw, 360px)" />
         ) : null}
 
         <div style={{ padding: 22 }}>
@@ -401,9 +491,7 @@ export default async function HomePage() {
           }}
         >
           <div>
-            <h2 style={{ margin: 0 }}>
-              Latest uplifting stories
-            </h2>
+            <h2 style={{ margin: 0 }}>Latest uplifting stories</h2>
 
             <p
               style={{
@@ -430,8 +518,7 @@ export default async function HomePage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(260px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
             gap: 18,
           }}
         >
@@ -470,8 +557,7 @@ export default async function HomePage() {
                           right: 10,
                           bottom: 10,
                           borderRadius: 999,
-                          background:
-                            "rgba(15, 23, 42, 0.82)",
+                          background: "rgba(15, 23, 42, 0.82)",
                           color: "#ffffff",
                           fontSize: 12,
                           fontWeight: 700,
@@ -550,9 +636,7 @@ export default async function HomePage() {
                       color: "#6b7280",
                     }}
                   >
-                    <span>
-                      {formatDate(story.publish_date)}
-                    </span>
+                    <span>{formatDate(story.publish_date)}</span>
 
                     <Link
                       href={`/stories/${story.slug}`}
@@ -561,9 +645,7 @@ export default async function HomePage() {
                         fontWeight: 600,
                       }}
                     >
-                      {story.video_url
-                        ? "Watch / read"
-                        : "Read more"}
+                      {story.video_url ? "Watch / read" : "Read more"}
                     </Link>
                   </div>
                 </div>
@@ -572,6 +654,149 @@ export default async function HomePage() {
           })}
         </div>
       </section>
+
+      {userStories.length > 0 ? (
+        <section style={{ marginTop: 42 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 16,
+              marginBottom: 18,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0 }}>From the community</h2>
+
+              <p
+                style={{
+                  margin: "6px 0 0 0",
+                  color: "#6b7280",
+                }}
+              >
+                Uplifting stories from users across the internet.
+              </p>
+            </div>
+
+            <Link
+              href="/category/user-stories"
+              style={{
+                color: "#047857",
+                fontWeight: 600,
+                fontSize: 14,
+              }}
+            >
+              View User Stories
+            </Link>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: 18,
+            }}
+          >
+            {userStories.map((story) => {
+              const cardImageUrl = getCardImageUrl(story);
+              const isVideo = Boolean(story.video_url);
+
+              return (
+                <article
+                  key={story.id}
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #ffedd5",
+                    borderRadius: 20,
+                    overflow: "hidden",
+                    boxShadow: "0 6px 18px rgba(15, 23, 42, 0.06)",
+                  }}
+                >
+                  {cardImageUrl ? (
+                    <img
+                      src={cardImageUrl}
+                      alt={story.title}
+                      loading="lazy"
+                      style={{
+                        width: "100%",
+                        height: 160,
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  ) : (
+                    <UserStoryFallbackPreview height={160} isVideo={isVideo} />
+                  )}
+
+                  <div style={{ padding: 16 }}>
+                    <div
+                      style={{
+                        marginBottom: 8,
+                        fontSize: 12,
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        color: "#ea580c",
+                      }}
+                    >
+                      {getCommunityLabel(story)}
+                      {story.video_url ? " • Video" : ""}
+                    </div>
+
+                    <h3
+                      style={{
+                        margin: "0 0 9px 0",
+                        fontSize: 19,
+                        lineHeight: 1.25,
+                      }}
+                    >
+                      <Link href={`/stories/${story.slug}`}>
+                        {story.title}
+                      </Link>
+                    </h3>
+
+                    <p
+                      style={{
+                        margin: "0 0 12px 0",
+                        color: "#4b5563",
+                        fontSize: 14,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {getCommunitySummary(story)}
+                    </p>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        fontSize: 13,
+                        color: "#6b7280",
+                      }}
+                    >
+                      <span>{formatDate(story.publish_date)}</span>
+
+                      <Link
+                        href={`/stories/${story.slug}`}
+                        style={{
+                          color: "#047857",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {story.video_url ? "Watch / read" : "Read more"}
+                      </Link>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

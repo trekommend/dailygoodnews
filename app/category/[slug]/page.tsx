@@ -18,6 +18,7 @@ type StoryCard = {
   publish_date: string | null;
   is_reddit_post?: boolean | null;
   reddit_subreddit?: string | null;
+  is_reader_submission?: boolean | null;
 };
 
 function formatDate(dateString?: string | null) {
@@ -35,6 +36,7 @@ function formatDate(dateString?: string | null) {
 
 function formatCategoryName(slug?: string | null) {
   if (!slug) return "Hope";
+  if (slug === "reddit" || slug === "user-stories") return "User Stories";
 
   return slug
     .split("-")
@@ -74,6 +76,8 @@ function getVideoThumbnail(value: string | null | undefined) {
 }
 
 function getCardLabel(story: StoryCard) {
+  if (story.is_reader_submission) return "📝 Community Story";
+
   if (story.is_reddit_post) {
     return story.reddit_subreddit ? `r/${story.reddit_subreddit}` : "Reddit";
   }
@@ -96,29 +100,27 @@ export async function generateMetadata({
 }: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params;
 
+  const isUserStoriesCategory = slug === "reddit" || slug === "user-stories";
   const categoryName = formatCategoryName(slug);
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://www.thegoodinus.net";
 
-  const description =
-    slug === "reddit"
-      ? "Uplifting posts from Reddit communities, curated by The Good in Us."
-      : `Read uplifting ${categoryName.toLowerCase()} stories from The Good in Us. Positive reporting that inspires hope.`;
+  const description = isUserStoriesCategory
+    ? "Uplifting stories from users across the internet."
+    : `Read uplifting ${categoryName.toLowerCase()} stories from The Good in Us. Positive reporting that inspires hope.`;
 
   return {
-    title:
-      slug === "reddit"
-        ? "User Stories | The Good in Us"
-        : `${categoryName} News | The Good in Us`,
+    title: isUserStoriesCategory
+      ? "User Stories | The Good in Us"
+      : `${categoryName} News | The Good in Us`,
     description,
     alternates: {
       canonical: `${siteUrl}/category/${slug}`,
     },
     openGraph: {
-      title:
-        slug === "reddit"
-          ? "Reddit Good News | The Good in Us"
-          : `${categoryName} News | The Good in Us`,
+      title: isUserStoriesCategory
+        ? "User Stories | The Good in Us"
+        : `${categoryName} News | The Good in Us`,
       description,
       url: `${siteUrl}/category/${slug}`,
       siteName: "The Good in Us",
@@ -127,10 +129,9 @@ export async function generateMetadata({
     },
     twitter: {
       card: "summary_large_image",
-      title:
-        slug === "reddit"
-          ? "Reddit Good News | The Good in Us"
-          : `${categoryName} News | The Good in Us`,
+      title: isUserStoriesCategory
+        ? "User Stories | The Good in Us"
+        : `${categoryName} News | The Good in Us`,
       description,
       images: [`${siteUrl}/og-image.jpg`],
     },
@@ -144,49 +145,49 @@ export async function generateMetadata({
 export default async function CategoryPage({ params }: CategoryPageProps) {
   const { slug } = await params;
   const categoryName = formatCategoryName(slug);
-  const isRedditCategory = slug === "reddit";
+  const isUserStoriesCategory = slug === "reddit" || slug === "user-stories";
 
   let query = supabase
-  .from("stories")
-  .select("*")
-  .not("slug", "is", null)
-  .order("publish_date", { ascending: false });
+    .from("stories")
+    .select("*")
+    .not("slug", "is", null)
+    .order("publish_date", { ascending: false });
 
-if (isRedditCategory) {
-  query = query.or("category_slug.eq.reddit,is_reader_submission.eq.true");
-} else {
-  query = query.eq("category_slug", slug);
-}
+  if (isUserStoriesCategory) {
+    query = query.or("category_slug.eq.reddit,is_reader_submission.eq.true");
+  } else {
+    query = query.eq("category_slug", slug);
+  }
 
-const { data } = await query;
+  const { data } = await query;
 
   const stories = (data || []) as StoryCard[];
 
   return (
     <main
-  style={{
-    maxWidth: 980,
-    margin: "auto",
-    padding: "18px 40px 40px",
-  }}
->
-      <h1 style={{ marginBottom: 4 }}>
-  {isRedditCategory ? "User Stories" : `${categoryName} News`}
-</h1>
+      style={{
+        maxWidth: 980,
+        margin: "auto",
+        padding: "18px 40px 40px",
+      }}
+    >
+      <h1 style={{ marginBottom: 2 }}>
+        {isUserStoriesCategory ? "User Stories" : `${categoryName} News`}
+      </h1>
 
       <p
-  style={{
-    marginTop: 2,
-    maxWidth: 720,
-    color: "#475569",
-    fontSize: 17,
-    lineHeight: 1.7,
-  }}
->
-  {isRedditCategory
-    ? "Uplifting stories from users across the internet."
-    : `Discover uplifting ${categoryName.toLowerCase()} stories from around the world. The Good in Us highlights positive news, hopeful moments, and meaningful progress.`}
-</p>
+        style={{
+          marginTop: 0,
+          maxWidth: 720,
+          color: "#475569",
+          fontSize: 17,
+          lineHeight: 1.7,
+        }}
+      >
+        {isUserStoriesCategory
+          ? "Uplifting stories from users across the internet."
+          : `Discover uplifting ${categoryName.toLowerCase()} stories from around the world. The Good in Us highlights positive news, hopeful moments, and meaningful progress.`}
+      </p>
 
       <div
         style={{
