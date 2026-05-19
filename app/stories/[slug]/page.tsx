@@ -87,6 +87,10 @@ function formatReadableDate(dateString: string | null) {
 function formatCategoryName(slug: string | null) {
   if (!slug) return "Hope";
 
+  if (slug === "reddit" || slug === "user-stories") {
+    return "User Stories";
+  }
+
   return slug
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -152,6 +156,16 @@ function getDirectVideoUrl(value: string | null | undefined) {
   }
 }
 
+function getAbsoluteImageUrl(value: string | null, siteUrl: string) {
+  if (!value) return `${siteUrl}/og-image.jpg`;
+
+  if (value.startsWith("http")) {
+    return value;
+  }
+
+  return `${siteUrl}${value.startsWith("/") ? value : `/${value}`}`;
+}
+
 export async function generateMetadata({
   params,
 }: StoryPageProps): Promise<Metadata> {
@@ -171,17 +185,13 @@ export async function generateMetadata({
   const cleanText = cleanTextForMeta(story.summary ?? story.content ?? "");
 
   const description =
-    truncateForMeta(cleanText) ||
-    "A positive news story from The Good in Us.";
+    truncateForMeta(cleanText) || "An uplifting story from The Good in Us.";
 
   const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
-
-  const ogImage = story.image_url
-    ? story.image_url
-    : `${siteUrl}/og-image.jpg`;
+  const ogImage = getAbsoluteImageUrl(story.image_url, siteUrl);
 
   return {
-    title: `${story.title} – Positive News | The Good in Us`,
+    title: story.title,
     description,
     alternates: {
       canonical: canonicalUrl,
@@ -192,7 +202,11 @@ export async function generateMetadata({
       title: story.title,
       description,
       siteName: "The Good in Us",
-      images: [{ url: ogImage }],
+      images: [
+        {
+          url: ogImage,
+        },
+      ],
       publishedTime: story.publish_date ?? undefined,
     },
     twitter: {
@@ -200,6 +214,10 @@ export async function generateMetadata({
       title: story.title,
       description,
       images: [ogImage],
+    },
+    robots: {
+      index: true,
+      follow: true,
     },
   };
 }
@@ -222,9 +240,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
 
   const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
 
-  const imageUrl = story.image_url
-    ? story.image_url
-    : `${siteUrl}/og-image.jpg`;
+  const imageUrl = getAbsoluteImageUrl(story.image_url, siteUrl);
 
   const formattedDate = formatReadableDate(story.publish_date);
 
@@ -237,9 +253,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
   const isRedditVideoPost = Boolean(story.is_reddit_post && story.video_url);
 
   const showFooterAttribution = Boolean(
-    story.source_url &&
-      story.source_name &&
-      !story.is_reddit_post
+    story.source_url && story.source_name && !story.is_reddit_post
   );
 
   const showSubmittedBy = Boolean(
@@ -257,7 +271,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
 
   const description =
     truncateForMeta(cleanSummary || cleanContent) ||
-    "A positive news story from The Good in Us.";
+    "An uplifting story from The Good in Us.";
 
   const { data: relatedStories } = await supabase
     .from("stories")
@@ -276,6 +290,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
     description,
     image: [imageUrl],
     datePublished: story.publish_date,
+    dateModified: story.publish_date,
     author: {
       "@type": "Person",
       name: authorName,
@@ -288,6 +303,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
         url: `${siteUrl}/og-image.jpg`,
       },
     },
+    articleSection: formatCategoryName(story.category_slug),
     mainEntityOfPage: {
       "@type": "WebPage",
       "@id": canonicalUrl,
@@ -303,7 +319,8 @@ export default async function StoryPage({ params }: StoryPageProps) {
         thumbnailUrl: [imageUrl],
         uploadDate: story.publish_date,
         contentUrl: story.video_url,
-        embedUrl: videoEmbedUrl || directVideoUrl || story.source_url || story.video_url,
+        embedUrl:
+          videoEmbedUrl || directVideoUrl || story.source_url || story.video_url,
         publisher: {
           "@type": "Organization",
           name: "The Good in Us",
@@ -563,10 +580,25 @@ export default async function StoryPage({ params }: StoryPageProps) {
               fontSize: 14,
             }}
           >
-            {isRedditVideoPost ? "Watch video on Reddit" : "View discussion on Reddit"}
+            {isRedditVideoPost
+              ? "Watch video on Reddit"
+              : "View discussion on Reddit"}
           </a>
         </div>
       ) : null}
+
+      <div style={{ marginTop: 32 }}>
+        <Link
+          href="/submit"
+          style={{
+            color: "#047857",
+            fontWeight: 600,
+            fontSize: 15,
+          }}
+        >
+          Have a story like this? Submit it here →
+        </Link>
+      </div>
 
       {related.length > 0 ? (
         <section
