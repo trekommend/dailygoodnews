@@ -16,11 +16,28 @@ const nextConfig: NextConfig = {
 
       // Washington Post / Arc / related image hosts
       { protocol: "https", hostname: "www.washingtonpost.com" },
-      { protocol: "https", hostname: "arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com" },
-      { protocol: "https", hostname: "cloudfront-us-east-1.images.arcpublishing.com" },
+      {
+        protocol: "https",
+        hostname: "arc-anglerfish-washpost-prod-washpost.s3.amazonaws.com",
+      },
+      {
+        protocol: "https",
+        hostname: "cloudfront-us-east-1.images.arcpublishing.com",
+      },
       { protocol: "https", hostname: "images.arcpublishing.com" },
     ],
   },
+
+  async redirects() {
+    return [
+      {
+        source: "/category/reddit",
+        destination: "/category/user-stories",
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
@@ -28,8 +45,14 @@ const nextConfig: NextConfig = {
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
           { key: "X-XSS-Protection", value: "1; mode=block" },
         ],
       },
