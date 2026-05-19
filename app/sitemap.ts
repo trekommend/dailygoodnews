@@ -17,6 +17,7 @@ const CATEGORY_SLUGS = [
   "health",
   "hope",
   "reddit",
+  "user-stories",
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -72,7 +73,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${SITE_URL}/category/${slug}`,
       lastModified: now,
       changeFrequency: "daily" as const,
-      priority: 0.8,
+      priority: slug === "user-stories" ? 0.85 : 0.8,
     })),
   ];
 
