@@ -229,9 +229,17 @@ export default async function AdminSubmissionsPage({
                 {profile.email || user.email}
               </span>
             </div>
-            <form action={signOut}>
-              <button
-                type="submit"
+            
+            <Link
+  href="/admin/stories/new"
+  className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
+>
+  + Add Story
+</Link>
+
+<form action={signOut}>
+  <button
+    type="submit"
                 className="rounded-2xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
               >
                 Sign Out
