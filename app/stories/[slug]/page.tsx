@@ -70,6 +70,16 @@ function truncateForMeta(text: string, maxLength = 160) {
   return `${sliced.trim()}...`;
 }
 
+function toIsoDateTime(value: string | null) {
+  if (!value) return undefined;
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return undefined;
+
+  return date.toISOString();
+}
+
 function formatReadableDate(dateString: string | null) {
   if (!dateString) return null;
 
@@ -189,6 +199,7 @@ export async function generateMetadata({
 
   const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
   const ogImage = getAbsoluteImageUrl(story.image_url, siteUrl);
+  const publishedTime = toIsoDateTime(story.publish_date);
 
   return {
     title: story.title,
@@ -207,7 +218,7 @@ export async function generateMetadata({
           url: ogImage,
         },
       ],
-      publishedTime: story.publish_date ?? undefined,
+      publishedTime,
     },
     twitter: {
       card: "summary_large_image",
@@ -239,17 +250,12 @@ export default async function StoryPage({ params }: StoryPageProps) {
   }
 
   const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
-
   const imageUrl = getAbsoluteImageUrl(story.image_url, siteUrl);
-
   const formattedDate = formatReadableDate(story.publish_date);
-
+  const structuredDate = toIsoDateTime(story.publish_date);
   const categoryName = formatCategoryName(story.category_slug);
-
   const videoEmbedUrl = getVideoEmbedUrl(story.video_url);
-
   const directVideoUrl = getDirectVideoUrl(story.video_url);
-
   const isRedditVideoPost = Boolean(story.is_reddit_post && story.video_url);
 
   const showFooterAttribution = Boolean(
@@ -266,7 +272,6 @@ export default async function StoryPage({ params }: StoryPageProps) {
       : "The Good in Us";
 
   const cleanSummary = cleanTextForMeta(story.summary ?? "");
-
   const cleanContent = cleanTextForMeta(story.content ?? "");
 
   const description =
@@ -289,8 +294,8 @@ export default async function StoryPage({ params }: StoryPageProps) {
     headline: story.title,
     description,
     image: [imageUrl],
-    datePublished: story.publish_date,
-    dateModified: story.publish_date,
+    datePublished: structuredDate,
+    dateModified: structuredDate,
     author: {
       "@type": "Person",
       name: authorName,
@@ -317,7 +322,7 @@ export default async function StoryPage({ params }: StoryPageProps) {
         name: story.title,
         description,
         thumbnailUrl: [imageUrl],
-        uploadDate: story.publish_date,
+        uploadDate: structuredDate,
         contentUrl: story.video_url,
         embedUrl:
           videoEmbedUrl || directVideoUrl || story.source_url || story.video_url,
