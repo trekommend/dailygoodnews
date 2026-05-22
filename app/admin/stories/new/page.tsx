@@ -265,19 +265,18 @@ export default async function AdminNewStoryPage({
                   Title
                 </label>
                 <input
-                  id="title"
-                  name="title"
-                  type="text"
-                  required
-                  placeholder="Example: Our neighborhood turned an empty lot into a garden"
-                  style={{
-                    width: "100%",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 16,
-                    padding: "14px 16px",
-                    fontSize: 15,
-                  }}
-                />
+  id="title"
+  name="title"
+  type="text"
+  placeholder="Optional for article links — we’ll try to extract this automatically"
+  style={{
+    width: "100%",
+    border: "1px solid #d1d5db",
+    borderRadius: 16,
+    padding: "14px 16px",
+    fontSize: 15,
+  }}
+/>
               </div>
 
               <div>
