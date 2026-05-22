@@ -37,6 +37,7 @@ function decodeHtmlEntities(text: string) {
     .replace(/&#8230;/g, "...")
     .replace(/&#038;/g, "&")
     .replace(/&#39;/g, "'")
+    .replace(/&#039;/g, "'")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
@@ -101,7 +102,7 @@ function guessTitleFromUrl(url: string) {
 function normalizeExtractedTitle(title: string) {
   const cleaned = decodeHtmlEntities(title)
     .replace(
-      /\s*[-|–—]\s*(ESPN|Washington Post|Good News Network|Positive News|Good Good Good|Fox News|CNN|BBC|Reuters|AP News|NPR|New York Times|The Guardian)\s*$/i,
+      /\s*[-|–—]\s*(ESPN|Washington Post|Good News Network|Positive News|Good Good Good|Fox News|CNN|BBC|Reuters|AP News|NPR|New York Times|The New York Times|NYTimes\.com|The Guardian)\s*$/i,
       ""
     )
     .trim();
@@ -119,6 +120,68 @@ function extractMetaContent(html: string, patterns: RegExp[]) {
   }
 
   return "";
+}
+
+function extractJsonLdArticleData(html: string) {
+  const scripts = html.match(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+  );
+
+  if (!scripts) {
+    return {
+      title: "",
+      summary: "",
+      imageUrl: null as string | null,
+    };
+  }
+
+  for (const script of scripts) {
+    const jsonText = script
+      .replace(/<script[^>]*>/i, "")
+      .replace(/<\/script>/i, "")
+      .trim();
+
+    try {
+      const parsed = JSON.parse(decodeHtmlEntities(jsonText));
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+
+      for (const item of items) {
+        const graph = Array.isArray(item["@graph"]) ? item["@graph"] : [item];
+
+        for (const node of graph) {
+          const type = node["@type"];
+          const isArticle =
+            type === "NewsArticle" ||
+            type === "Article" ||
+            (Array.isArray(type) &&
+              (type.includes("NewsArticle") || type.includes("Article")));
+
+          if (!isArticle) continue;
+
+          const image =
+            typeof node.image === "string"
+              ? node.image
+              : Array.isArray(node.image)
+                ? node.image[0]
+                : node.image?.url || null;
+
+          return {
+            title: node.headline || node.name || "",
+            summary: node.description || "",
+            imageUrl: image,
+          };
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return {
+    title: "",
+    summary: "",
+    imageUrl: null as string | null,
+  };
 }
 
 function absoluteUrl(url: string, baseUrl: string) {
@@ -180,8 +243,10 @@ async function extractArticlePreview(url: string) {
     }
 
     const html = await response.text();
+    const jsonLd = extractJsonLdArticleData(html);
 
     const title =
+      normalizeExtractedTitle(jsonLd.title || "") ||
       normalizeExtractedTitle(
         extractMetaContent(html, [
           /<meta[^>]+property=["']og:title["'][^>]+content="([^"]+)"[^>]*>/i,
@@ -192,18 +257,21 @@ async function extractArticlePreview(url: string) {
           /<meta[^>]+name=["']twitter:title["'][^>]+content='([^']+)'[^>]*>/i,
           /<title[^>]*>([\s\S]*?)<\/title>/i,
         ])
-      ) || guessTitleFromUrl(url);
+      ) ||
+      guessTitleFromUrl(url);
 
-    const summary = extractMetaContent(html, [
-      /<meta[^>]+property=["']og:description["'][^>]+content="([^"]+)"[^>]*>/i,
-      /<meta[^>]+property=["']og:description["'][^>]+content='([^']+)'[^>]*>/i,
-      /<meta[^>]+content="([^"]+)"[^>]+property=["']og:description["'][^>]*>/i,
-      /<meta[^>]+content='([^']+)'[^>]+property=["']og:description["'][^>]*>/i,
-      /<meta[^>]+name=["']description["'][^>]+content="([^"]+)"[^>]*>/i,
-      /<meta[^>]+name=["']description["'][^>]+content='([^']+)'[^>]*>/i,
-      /<meta[^>]+name=["']twitter:description["'][^>]+content="([^"]+)"[^>]*>/i,
-      /<meta[^>]+name=["']twitter:description["'][^>]+content='([^']+)'[^>]*>/i,
-    ]);
+    const summary =
+      decodeHtmlEntities(jsonLd.summary || "") ||
+      extractMetaContent(html, [
+        /<meta[^>]+property=["']og:description["'][^>]+content="([^"]+)"[^>]*>/i,
+        /<meta[^>]+property=["']og:description["'][^>]+content='([^']+)'[^>]*>/i,
+        /<meta[^>]+content="([^"]+)"[^>]+property=["']og:description["'][^>]*>/i,
+        /<meta[^>]+content='([^']+)'[^>]+property=["']og:description["'][^>]*>/i,
+        /<meta[^>]+name=["']description["'][^>]+content="([^"]+)"[^>]*>/i,
+        /<meta[^>]+name=["']description["'][^>]+content='([^']+)'[^>]*>/i,
+        /<meta[^>]+name=["']twitter:description["'][^>]+content="([^"]+)"[^>]*>/i,
+        /<meta[^>]+name=["']twitter:description["'][^>]+content='([^']+)'[^>]*>/i,
+      ]);
 
     const sourceName =
       extractMetaContent(html, [
@@ -234,6 +302,10 @@ async function extractArticlePreview(url: string) {
         imageUrl = cleaned;
         break;
       }
+    }
+
+    if (!imageUrl && jsonLd.imageUrl) {
+      imageUrl = cleanImageUrl(jsonLd.imageUrl, url);
     }
 
     return {
@@ -328,30 +400,30 @@ export async function createStory(formData: FormData) {
     : "hope";
 
   if (submissionType === "article_link" && !sourceUrl) {
-  redirect(
-    "/admin/stories/new?error=Please%20enter%20a%20source%20URL%20for%20article%20links."
-  );
-}
-
-// ✅ NEW: prevent duplicate articles
-if (submissionType === "article_link" && sourceUrl) {
-  const { data: existingStory } = await supabase
-    .from("stories")
-    .select("slug")
-    .eq("source_url", sourceUrl)
-    .maybeSingle();
-
-  if (existingStory?.slug) {
-    redirect(`/stories/${existingStory.slug}`);
+    redirect(
+      "/admin/stories/new?error=Please%20enter%20a%20source%20URL%20for%20article%20links."
+    );
   }
-}
 
-if (submissionType === "article_link" && sourceUrl) {
-  const preview = await extractArticlePreview(sourceUrl);
+  if (submissionType === "article_link" && sourceUrl) {
+    const { data: existingStory } = await supabase
+      .from("stories")
+      .select("slug")
+      .eq("source_url", sourceUrl)
+      .maybeSingle();
+
+    if (existingStory?.slug) {
+      redirect(`/stories/${existingStory.slug}`);
+    }
+  }
+
+  if (submissionType === "article_link" && sourceUrl) {
+    const preview = await extractArticlePreview(sourceUrl);
 
     title = title || preview.title || guessTitleFromUrl(sourceUrl);
     summary = summary || preview.summary || null;
-    sourceName = sourceName || preview.sourceName || inferPublicationNameFromUrl(sourceUrl);
+    sourceName =
+      sourceName || preview.sourceName || inferPublicationNameFromUrl(sourceUrl);
     imageUrl = imageUrl || preview.imageUrl || null;
   }
 
