@@ -328,13 +328,26 @@ export async function createStory(formData: FormData) {
     : "hope";
 
   if (submissionType === "article_link" && !sourceUrl) {
-    redirect(
-      "/admin/stories/new?error=Please%20enter%20a%20source%20URL%20for%20article%20links."
-    );
-  }
+  redirect(
+    "/admin/stories/new?error=Please%20enter%20a%20source%20URL%20for%20article%20links."
+  );
+}
 
-  if (submissionType === "article_link" && sourceUrl) {
-    const preview = await extractArticlePreview(sourceUrl);
+// ✅ NEW: prevent duplicate articles
+if (submissionType === "article_link" && sourceUrl) {
+  const { data: existingStory } = await supabase
+    .from("stories")
+    .select("slug")
+    .eq("source_url", sourceUrl)
+    .maybeSingle();
+
+  if (existingStory?.slug) {
+    redirect(`/stories/${existingStory.slug}`);
+  }
+}
+
+if (submissionType === "article_link" && sourceUrl) {
+  const preview = await extractArticlePreview(sourceUrl);
 
     title = title || preview.title || guessTitleFromUrl(sourceUrl);
     summary = summary || preview.summary || null;
