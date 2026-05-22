@@ -19,13 +19,239 @@ function slugify(text: string) {
     .replace(/['’]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "")
+    .replace(/-{2,}/g, "-")
     .slice(0, 90);
 }
 
 function cleanOptional(value: FormDataEntryValue | null) {
   const cleaned = String(value || "").trim();
   return cleaned.length > 0 ? cleaned : null;
+}
+
+function decodeHtmlEntities(text: string) {
+  return text
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"')
+    .replace(/&#8230;/g, "...")
+    .replace(/&#038;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function getDomainFromUrl(value: string) {
+  try {
+    return new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function inferPublicationNameFromUrl(url: string) {
+  const domain = getDomainFromUrl(url);
+
+  const known: Record<string, string> = {
+    "washingtonpost.com": "Washington Post",
+    "goodnewsnetwork.org": "Good News Network",
+    "positive.news": "Positive News",
+    "goodgoodgood.co": "Good Good Good",
+    "foxnews.com": "Fox News",
+    "nytimes.com": "New York Times",
+    "theguardian.com": "The Guardian",
+    "bbc.com": "BBC",
+    "bbc.co.uk": "BBC",
+    "cnn.com": "CNN",
+    "npr.org": "NPR",
+    "apnews.com": "AP News",
+    "reuters.com": "Reuters",
+  };
+
+  if (known[domain]) return known[domain];
+
+  const base = domain.split(".")[0] || domain;
+  return base
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function guessTitleFromUrl(url: string) {
+  try {
+    const pathname = new URL(url).pathname;
+    const last = pathname.split("/").filter(Boolean).pop() || "";
+
+    if (!last) return "Submitted article";
+
+    return last
+      .replace(/[-_]+/g, " ")
+      .replace(/\.[a-z0-9]+$/i, "")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  } catch {
+    return "Submitted article";
+  }
+}
+
+function normalizeExtractedTitle(title: string) {
+  const cleaned = decodeHtmlEntities(title)
+    .replace(
+      /\s*[-|–—]\s*(ESPN|Washington Post|Good News Network|Positive News|Good Good Good|Fox News|CNN|BBC|Reuters|AP News|NPR|New York Times|The Guardian)\s*$/i,
+      ""
+    )
+    .trim();
+
+  return cleaned || title.trim();
+}
+
+function extractMetaContent(html: string, patterns: RegExp[]) {
+  for (const pattern of patterns) {
+    const match = html.match(pattern)?.[1] ?? html.match(pattern)?.[2];
+
+    if (match) {
+      return decodeHtmlEntities(match.trim());
+    }
+  }
+
+  return "";
+}
+
+function absoluteUrl(url: string, baseUrl: string) {
+  try {
+    return new URL(url, baseUrl).toString();
+  } catch {
+    return url;
+  }
+}
+
+function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
+  if (!url) return null;
+
+  const raw = decodeHtmlEntities(url.trim());
+
+  if (
+    !raw ||
+    raw.startsWith("data:") ||
+    raw.startsWith("blob:") ||
+    /sprite|icon|logo|avatar|1x1|pixel/i.test(raw)
+  ) {
+    return null;
+  }
+
+  const cleaned = absoluteUrl(raw, baseUrl);
+
+  if (!/^https?:\/\//i.test(cleaned)) return null;
+  if (/\.svg(\?|$)/i.test(cleaned)) return null;
+  if (/sprite|icon|logo|avatar|1x1|pixel/i.test(cleaned)) return null;
+
+  return cleaned;
+}
+
+async function extractArticlePreview(url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return {
+        title: "",
+        summary: "",
+        sourceName: "",
+        imageUrl: null as string | null,
+      };
+    }
+
+    const html = await response.text();
+
+    const title =
+      normalizeExtractedTitle(
+        extractMetaContent(html, [
+          /<meta[^>]+property=["']og:title["'][^>]+content="([^"]+)"[^>]*>/i,
+          /<meta[^>]+property=["']og:title["'][^>]+content='([^']+)'[^>]*>/i,
+          /<meta[^>]+content="([^"]+)"[^>]+property=["']og:title["'][^>]*>/i,
+          /<meta[^>]+content='([^']+)'[^>]+property=["']og:title["'][^>]*>/i,
+          /<meta[^>]+name=["']twitter:title["'][^>]+content="([^"]+)"[^>]*>/i,
+          /<meta[^>]+name=["']twitter:title["'][^>]+content='([^']+)'[^>]*>/i,
+          /<title[^>]*>([\s\S]*?)<\/title>/i,
+        ])
+      ) || guessTitleFromUrl(url);
+
+    const summary = extractMetaContent(html, [
+      /<meta[^>]+property=["']og:description["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+property=["']og:description["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+property=["']og:description["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+property=["']og:description["'][^>]*>/i,
+      /<meta[^>]+name=["']description["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+name=["']description["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+name=["']twitter:description["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+name=["']twitter:description["'][^>]+content='([^']+)'[^>]*>/i,
+    ]);
+
+    const sourceName =
+      extractMetaContent(html, [
+        /<meta[^>]+property=["']og:site_name["'][^>]+content="([^"]+)"[^>]*>/i,
+        /<meta[^>]+property=["']og:site_name["'][^>]+content='([^']+)'[^>]*>/i,
+        /<meta[^>]+content="([^"]+)"[^>]+property=["']og:site_name["'][^>]*>/i,
+        /<meta[^>]+content='([^']+)'[^>]+property=["']og:site_name["'][^>]*>/i,
+        /<meta[^>]+name=["']application-name["'][^>]+content="([^"]+)"[^>]*>/i,
+        /<meta[^>]+name=["']application-name["'][^>]+content='([^']+)'[^>]*>/i,
+      ]) || inferPublicationNameFromUrl(url);
+
+    const imagePatterns = [
+      /<meta[^>]+property=["']og:image["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+property=["']og:image["'][^>]+content='([^']+)'[^>]*>/i,
+      /<meta[^>]+content="([^"]+)"[^>]+property=["']og:image["'][^>]*>/i,
+      /<meta[^>]+content='([^']+)'[^>]+property=["']og:image["'][^>]*>/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content="([^"]+)"[^>]*>/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content='([^']+)'[^>]*>/i,
+    ];
+
+    let imageUrl: string | null = null;
+
+    for (const pattern of imagePatterns) {
+      const match = html.match(pattern)?.[1];
+      const cleaned = cleanImageUrl(match, url);
+
+      if (cleaned) {
+        imageUrl = cleaned;
+        break;
+      }
+    }
+
+    return {
+      title,
+      summary,
+      sourceName,
+      imageUrl,
+    };
+  } catch {
+    return {
+      title: guessTitleFromUrl(url),
+      summary: "",
+      sourceName: inferPublicationNameFromUrl(url),
+      imageUrl: null,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function requireAdmin() {
@@ -83,12 +309,12 @@ export async function createStory(formData: FormData) {
     formData.get("submission_type") || "original_story"
   ) as "original_story" | "article_link";
 
-  const title = String(formData.get("title") || "").trim();
-  const summary = cleanOptional(formData.get("summary"));
+  let title = String(formData.get("title") || "").trim();
+  let summary = cleanOptional(formData.get("summary"));
   const content = cleanOptional(formData.get("content"));
   const sourceUrl = cleanOptional(formData.get("source_url"));
-  const sourceName = cleanOptional(formData.get("source_name"));
-  const imageUrl = cleanOptional(formData.get("image_url"));
+  let sourceName = cleanOptional(formData.get("source_name"));
+  let imageUrl = cleanOptional(formData.get("image_url"));
   const videoUrl = cleanOptional(formData.get("video_url"));
   const authorName = cleanOptional(formData.get("author_name")) || "Admin";
   const authorEmail =
@@ -101,15 +327,24 @@ export async function createStory(formData: FormData) {
     ? categoryInput
     : "hope";
 
-  if (!title) {
-    redirect(
-      "/admin/stories/new?error=Please%20enter%20a%20title%20before%20publishing."
-    );
-  }
-
   if (submissionType === "article_link" && !sourceUrl) {
     redirect(
       "/admin/stories/new?error=Please%20enter%20a%20source%20URL%20for%20article%20links."
+    );
+  }
+
+  if (submissionType === "article_link" && sourceUrl) {
+    const preview = await extractArticlePreview(sourceUrl);
+
+    title = title || preview.title || guessTitleFromUrl(sourceUrl);
+    summary = summary || preview.summary || null;
+    sourceName = sourceName || preview.sourceName || inferPublicationNameFromUrl(sourceUrl);
+    imageUrl = imageUrl || preview.imageUrl || null;
+  }
+
+  if (!title) {
+    redirect(
+      "/admin/stories/new?error=Please%20enter%20a%20title%20before%20publishing."
     );
   }
 
@@ -148,7 +383,7 @@ export async function createStory(formData: FormData) {
     );
   }
 
-  const { error: submissionError } = await supabase
+  const { data: insertedSubmission, error: submissionError } = await supabase
     .from("reader_submissions")
     .insert({
       submission_type: submissionType,
@@ -169,17 +404,21 @@ export async function createStory(formData: FormData) {
       consent_terms: true,
       moderation_notes: "Admin-created and auto-published",
       linked_story_id: insertedStory.id,
-    });
+    })
+    .select("id")
+    .single();
 
   if (submissionError) {
     console.error("Admin submission log insert error:", submissionError);
   }
 
-  await supabase.from("reader_submission_events").insert({
-    submission_id: insertedStory.id,
-    event_type: "admin_published",
-    notes: "Admin-created story published directly to stories table",
-  });
+  if (insertedSubmission?.id) {
+    await supabase.from("reader_submission_events").insert({
+      submission_id: insertedSubmission.id,
+      event_type: "admin_published",
+      notes: "Admin-created story published directly to stories table",
+    });
+  }
 
   redirect(`/stories/${insertedStory.slug}`);
 }
