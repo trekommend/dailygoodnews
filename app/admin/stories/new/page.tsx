@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "../../../../lib/supabase/server";
-import { createStory } from "./actions";
+import { createStory, previewArticle } from "./actions";
 
 type SearchParams = Promise<{
   error?: string;
@@ -95,9 +95,9 @@ export default async function AdminNewStoryPage({
             color: "#4b5563",
           }}
         >
-          Publish an original story or article link immediately. Admin-created
-          stories are automatically published and also logged in the submissions
-          console.
+          Paste an article URL first. We’ll try to automatically extract the
+          title, summary, source, and image. If the site blocks extraction, you
+          can fill in the fields manually before publishing.
         </p>
 
         <div style={{ marginTop: 16 }}>
@@ -229,8 +229,8 @@ export default async function AdminNewStoryPage({
                       color: "#4b5563",
                     }}
                   >
-                    Publish a positive article from another publication with
-                    attribution.
+                    Paste the article URL, preview extracted metadata, then
+                    publish with attribution.
                   </div>
                 </div>
               </label>
@@ -262,21 +262,21 @@ export default async function AdminNewStoryPage({
                     color: "#111827",
                   }}
                 >
-                  Title
+                  Title (optional for article links)
                 </label>
                 <input
-  id="title"
-  name="title"
-  type="text"
-  placeholder="Optional for article links — we’ll try to extract this automatically"
-  style={{
-    width: "100%",
-    border: "1px solid #d1d5db",
-    borderRadius: 16,
-    padding: "14px 16px",
-    fontSize: 15,
-  }}
-/>
+                  id="title"
+                  name="title"
+                  type="text"
+                  placeholder="Optional for article links — we’ll try to extract this automatically"
+                  style={{
+                    width: "100%",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 16,
+                    padding: "14px 16px",
+                    fontSize: 15,
+                  }}
+                />
               </div>
 
               <div>
@@ -290,13 +290,13 @@ export default async function AdminNewStoryPage({
                     color: "#111827",
                   }}
                 >
-                  Summary
+                  Summary (auto-filled when available)
                 </label>
                 <textarea
                   id="summary"
                   name="summary"
                   rows={5}
-                  placeholder="Write a short summary that will appear on cards and at the top of the story page."
+                  placeholder="Optional for article links — we’ll try to extract this automatically"
                   style={{
                     width: "100%",
                     border: "1px solid #d1d5db",
@@ -382,13 +382,13 @@ export default async function AdminNewStoryPage({
                     color: "#111827",
                   }}
                 >
-                  Image URL
+                  Image URL (auto-filled when available)
                 </label>
                 <input
                   id="image_url"
                   name="image_url"
                   type="url"
-                  placeholder="https://example.com/image.jpg"
+                  placeholder="Optional for article links — we’ll try to extract this automatically"
                   style={{
                     width: "100%",
                     border: "1px solid #d1d5db",
@@ -494,7 +494,7 @@ export default async function AdminNewStoryPage({
                   id="source_name"
                   name="source_name"
                   type="text"
-                  placeholder="Example: Good News Network"
+                  placeholder="Optional for article links — we’ll try to extract this automatically"
                   style={{
                     width: "100%",
                     border: "1px solid #d1d5db",
@@ -564,6 +564,24 @@ export default async function AdminNewStoryPage({
           </section>
 
           <div style={{ paddingTop: 24, borderTop: "1px solid #f3f4f6" }}>
+            <button
+              type="submit"
+              formAction={previewArticle}
+              style={{
+                marginRight: 12,
+                border: "1px solid #d1d5db",
+                borderRadius: 16,
+                background: "#ffffff",
+                color: "#111827",
+                fontWeight: 600,
+                fontSize: 14,
+                padding: "14px 24px",
+                cursor: "pointer",
+              }}
+            >
+              Preview Article
+            </button>
+
             <button
               type="submit"
               style={{

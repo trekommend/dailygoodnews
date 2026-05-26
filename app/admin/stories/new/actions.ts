@@ -215,7 +215,7 @@ function cleanImageUrl(url: string | null | undefined, baseUrl: string) {
   return cleaned;
 }
 
-async function extractArticlePreview(url: string) {
+export async function extractArticlePreview(url: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
 
@@ -371,6 +371,18 @@ async function createUniqueSlug(
   }
 
   return `${baseSlug}-${Date.now()}`;
+}
+
+export async function previewArticle(formData: FormData) {
+  const sourceUrl = cleanOptional(formData.get("source_url"));
+
+  if (!sourceUrl) {
+    redirect(
+      "/admin/stories/new?error=Please%20enter%20a%20source%20URL%20before%20previewing."
+    );
+  }
+
+  redirect(`/admin/stories/preview?url=${encodeURIComponent(sourceUrl)}`);
 }
 
 export async function createStory(formData: FormData) {
