@@ -26,9 +26,9 @@ export const metadata: Metadata = {
       "Uplifting, positive news from around the world. Real stories that inspire hope and highlight the good in us.",
   },
   robots: {
-    index: process.env.NODE_ENV === "production",
-    follow: process.env.NODE_ENV === "production",
-  },
+  index: true,
+  follow: true,
+},
 };
 
 export default function RootLayout({
