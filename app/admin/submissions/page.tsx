@@ -3,10 +3,16 @@ import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
 import AdminSubmissionRowActions from "./AdminSubmissionRowActions";
 
+type SubmissionStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "published";
+
 type SubmissionRow = {
   id: string;
   submission_type: "original_story" | "article_link";
-  status: "pending" | "approved" | "rejected" | "published";
+  status: SubmissionStatus;
   title: string;
   author_name: string;
   author_email: string;
@@ -15,6 +21,15 @@ type SubmissionRow = {
   moderation_notes: string | null;
   linked_story_id: string | null;
   story_slug?: string | null;
+  bluesky_posted_at?: string | null;
+  bluesky_post_uri?: string | null;
+};
+
+type LinkedStoryRow = {
+  id: string;
+  slug: string | null;
+  bluesky_posted_at: string | null;
+  bluesky_post_uri: string | null;
 };
 
 type SearchParams = Promise<{
@@ -29,28 +44,32 @@ function formatDate(value: string) {
   });
 }
 
-function getStatusPillStyles(status: SubmissionRow["status"]) {
+function getStatusPillStyles(status: SubmissionStatus) {
   switch (status) {
     case "pending":
       return {
         background: "#fef3c7",
         color: "#92400e",
       };
+
     case "approved":
       return {
         background: "#dbeafe",
         color: "#1d4ed8",
       };
+
     case "rejected":
       return {
         background: "#fee2e2",
         color: "#b91c1c",
       };
+
     case "published":
       return {
         background: "#d1fae5",
         color: "#065f46",
       };
+
     default:
       return {
         background: "#f3f4f6",
@@ -71,7 +90,10 @@ function buildFilterHref(status?: string, flagged?: boolean) {
   }
 
   const query = params.toString();
-  return query ? `/admin/submissions?${query}` : "/admin/submissions";
+
+  return query
+    ? `/admin/submissions?${query}`
+    : "/admin/submissions";
 }
 
 function FilterLink({
@@ -95,7 +117,9 @@ function FilterLink({
         fontSize: 14,
         fontWeight: 600,
         textDecoration: "none",
-        border: active ? "1px solid #059669" : "1px solid #d1d5db",
+        border: active
+          ? "1px solid #059669"
+          : "1px solid #d1d5db",
         background: active ? "#ecfdf5" : "#ffffff",
         color: active ? "#047857" : "#374151",
       }}
@@ -143,6 +167,11 @@ export default async function AdminSubmissionsPage({
     .order("submitted_at", { ascending: false });
 
   if (submissionsError) {
+    console.error(
+      "Admin submissions fetch error:",
+      submissionsError
+    );
+
     return (
       <main className="min-h-screen bg-gray-50 px-4 py-8">
         <div className="mx-auto max-w-6xl">
@@ -156,46 +185,88 @@ export default async function AdminSubmissionsPage({
 
   const baseRows = (submissions || []) as SubmissionRow[];
 
-  const linkedStoryIds = baseRows
-    .map((item) => item.linked_story_id)
-    .filter((id): id is string => !!id);
+  const linkedStoryIds = Array.from(
+    new Set(
+      baseRows
+        .map((item) => item.linked_story_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
 
-  let storySlugMap = new Map<string, string>();
+  let linkedStoryMap = new Map<string, LinkedStoryRow>();
 
   if (linkedStoryIds.length > 0) {
-    const { data: linkedStories } = await supabase
+    const {
+      data: linkedStories,
+      error: linkedStoriesError,
+    } = await supabase
       .from("stories")
-      .select("id, slug")
+      .select(
+        "id, slug, bluesky_posted_at, bluesky_post_uri"
+      )
       .in("id", linkedStoryIds);
 
-    storySlugMap = new Map(
-      (linkedStories || [])
-        .filter((story) => !!story.id && !!story.slug)
-        .map((story) => [story.id as string, story.slug as string])
-    );
+    if (linkedStoriesError) {
+      console.error(
+        "Linked stories fetch error:",
+        linkedStoriesError
+      );
+    } else {
+      linkedStoryMap = new Map(
+        ((linkedStories || []) as LinkedStoryRow[]).map(
+          (story) => [story.id, story]
+        )
+      );
+    }
   }
 
-  const allRows = baseRows.map((row) => ({
-    ...row,
-    story_slug: row.linked_story_id
-      ? storySlugMap.get(row.linked_story_id) || null
-      : null,
-  }));
+  const allRows: SubmissionRow[] = baseRows.map((row) => {
+    const linkedStory = row.linked_story_id
+      ? linkedStoryMap.get(row.linked_story_id)
+      : undefined;
 
-  const pendingCount = allRows.filter((item) => item.status === "pending").length;
-  const approvedCount = allRows.filter((item) => item.status === "approved").length;
-  const rejectedCount = allRows.filter((item) => item.status === "rejected").length;
-  const publishedCount = allRows.filter((item) => item.status === "published").length;
-  const flaggedCount = allRows.filter((item) => !!item.moderation_notes).length;
+    return {
+      ...row,
+      story_slug: linkedStory?.slug || null,
+      bluesky_posted_at:
+        linkedStory?.bluesky_posted_at || null,
+      bluesky_post_uri:
+        linkedStory?.bluesky_post_uri || null,
+    };
+  });
+
+  const pendingCount = allRows.filter(
+    (item) => item.status === "pending"
+  ).length;
+
+  const approvedCount = allRows.filter(
+    (item) => item.status === "approved"
+  ).length;
+
+  const rejectedCount = allRows.filter(
+    (item) => item.status === "rejected"
+  ).length;
+
+  const publishedCount = allRows.filter(
+    (item) => item.status === "published"
+  ).length;
+
+  const flaggedCount = allRows.filter(
+    (item) => Boolean(item.moderation_notes)
+  ).length;
 
   let rows = allRows;
 
   if (selectedStatus !== "all") {
-    rows = rows.filter((item) => item.status === selectedStatus);
+    rows = rows.filter(
+      (item) => item.status === selectedStatus
+    );
   }
 
   if (flaggedOnly) {
-    rows = rows.filter((item) => !!item.moderation_notes);
+    rows = rows.filter(
+      (item) => Boolean(item.moderation_notes)
+    );
   }
 
   async function signOut() {
@@ -212,13 +283,16 @@ export default async function AdminSubmissionsPage({
         <div className="mb-8 flex flex-col gap-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">
-              Daily Good News
+              The Good in Us
             </p>
+
             <h1 className="text-3xl font-bold text-gray-900">
               Reader Submissions
             </h1>
+
             <p className="mt-2 text-sm text-gray-600">
-              Review original stories and article links submitted by readers.
+              Review original stories and article links submitted
+              by readers.
             </p>
           </div>
 
@@ -229,22 +303,24 @@ export default async function AdminSubmissionsPage({
                 {profile.email || user.email}
               </span>
             </div>
-            
-            <Link
-  href="/admin/stories/new"
-  className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
->
-  + Add Story
-</Link>
 
-<form action={signOut}>
-  <button
-    type="submit"
-                className="rounded-2xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/admin/stories/new"
+                className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
               >
-                Sign Out
-              </button>
-            </form>
+                + Add Story
+              </Link>
+
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="rounded-2xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                >
+                  Sign Out
+                </button>
+              </form>
+            </div>
           </div>
         </div>
 
@@ -269,6 +345,7 @@ export default async function AdminSubmissionsPage({
                 </th>
               </tr>
             </thead>
+
             <tbody>
               <tr className="text-center">
                 <td className="px-4 py-4 text-2xl font-bold text-gray-900">
@@ -292,34 +369,51 @@ export default async function AdminSubmissionsPage({
         </div>
 
         <div className="mb-6 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 text-sm font-semibold text-gray-900">Filters</div>
+          <div className="mb-3 text-sm font-semibold text-gray-900">
+            Filters
+          </div>
 
           <div className="flex flex-wrap gap-3">
             <FilterLink
               label="All"
               href={buildFilterHref("all", false)}
-              active={selectedStatus === "all" && !flaggedOnly}
+              active={
+                selectedStatus === "all" && !flaggedOnly
+              }
             />
+
             <FilterLink
               label="Pending"
               href={buildFilterHref("pending", false)}
-              active={selectedStatus === "pending" && !flaggedOnly}
+              active={
+                selectedStatus === "pending" && !flaggedOnly
+              }
             />
+
             <FilterLink
               label="Approved"
               href={buildFilterHref("approved", false)}
-              active={selectedStatus === "approved" && !flaggedOnly}
+              active={
+                selectedStatus === "approved" && !flaggedOnly
+              }
             />
+
             <FilterLink
               label="Rejected"
               href={buildFilterHref("rejected", false)}
-              active={selectedStatus === "rejected" && !flaggedOnly}
+              active={
+                selectedStatus === "rejected" && !flaggedOnly
+              }
             />
+
             <FilterLink
               label="Published"
               href={buildFilterHref("published", false)}
-              active={selectedStatus === "published" && !flaggedOnly}
+              active={
+                selectedStatus === "published" && !flaggedOnly
+              }
             />
+
             <FilterLink
               label="Flagged"
               href={buildFilterHref("all", true)}
@@ -373,13 +467,19 @@ export default async function AdminSubmissionsPage({
                     </th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {rows.map((submission) => {
-                    const statusStyles = getStatusPillStyles(submission.status);
-                    const isFlagged = !!submission.moderation_notes;
+                    const statusStyles =
+                      getStatusPillStyles(submission.status);
+
+                    const isFlagged = Boolean(
+                      submission.moderation_notes
+                    );
 
                     const typeCell =
-                      submission.submission_type === "article_link" &&
+                      submission.submission_type ===
+                        "article_link" &&
                       submission.story_slug ? (
                         <Link
                           href={`/stories/${submission.story_slug}`}
@@ -388,7 +488,8 @@ export default async function AdminSubmissionsPage({
                         >
                           Article Link
                         </Link>
-                      ) : submission.submission_type === "original_story" ? (
+                      ) : submission.submission_type ===
+                        "original_story" ? (
                         "Original Story"
                       ) : (
                         "Article Link"
@@ -430,17 +531,26 @@ export default async function AdminSubmissionsPage({
                                 borderRadius: 9999,
                                 padding: "4px 12px",
                                 fontWeight: 600,
-                                background: statusStyles.background,
+                                background:
+                                  statusStyles.background,
                                 color: statusStyles.color,
                               }}
                             >
-                              {submission.status.charAt(0).toUpperCase() +
+                              {submission.status
+                                .charAt(0)
+                                .toUpperCase() +
                                 submission.status.slice(1)}
                             </span>
 
                             {isFlagged ? (
                               <span className="inline-flex w-fit items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
                                 Flagged
+                              </span>
+                            ) : null}
+
+                            {submission.bluesky_posted_at ? (
+                              <span className="inline-flex w-fit items-center rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">
+                                On Bluesky
                               </span>
                             ) : null}
                           </div>
@@ -457,13 +567,21 @@ export default async function AdminSubmissionsPage({
                         </td>
 
                         <td className="px-6 py-4 text-sm text-gray-700">
-                          {formatDate(submission.submitted_at)}
+                          {formatDate(
+                            submission.submitted_at
+                          )}
                         </td>
 
                         <td className="px-6 py-4 text-sm">
                           <AdminSubmissionRowActions
                             submissionId={submission.id}
                             status={submission.status}
+                            linkedStoryId={
+                              submission.linked_story_id
+                            }
+                            blueskyPostedAt={
+                              submission.bluesky_posted_at
+                            }
                           />
                         </td>
 
