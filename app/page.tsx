@@ -21,6 +21,7 @@ type Story = {
 
 function formatCategory(category?: string | null) {
   if (!category) return "Hope";
+
   if (category === "reddit" || category === "user-stories") {
     return "User Stories";
   }
@@ -41,12 +42,18 @@ function formatDate(dateString?: string | null) {
 }
 
 function getStoryTimestamp(story: Story) {
-  return new Date(story.publish_date || story.created_at || 0).getTime();
+  return new Date(
+    story.publish_date || story.created_at || 0
+  ).getTime();
 }
 
 function getAgeHours(story: Story) {
   const timestamp = getStoryTimestamp(story);
-  if (!timestamp) return Number.POSITIVE_INFINITY;
+
+  if (!timestamp) {
+    return Number.POSITIVE_INFINITY;
+  }
+
   return (Date.now() - timestamp) / (1000 * 60 * 60);
 }
 
@@ -57,6 +64,7 @@ function getFreshnessScore(story: Story) {
   if (ageHours <= 48) return 95;
   if (ageHours <= 72) return 75;
   if (ageHours <= 24 * 7) return 35;
+
   return 0;
 }
 
@@ -64,6 +72,7 @@ function getFeaturedRank(story: Story) {
   const score = story.story_score || 0;
   const freshness = getFreshnessScore(story);
   const featuredBoost = story.featured ? 1000 : 0;
+
   return featuredBoost + score + freshness;
 }
 
@@ -72,16 +81,23 @@ function getYouTubeThumbnailUrl(videoUrl?: string | null) {
 
   try {
     const url = new URL(videoUrl);
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const host = url.hostname
+      .toLowerCase()
+      .replace(/^www\./, "");
 
-    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+    if (
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com")
+    ) {
       const videoId = url.searchParams.get("v");
 
       if (videoId) {
         return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
       }
 
-      const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
+      const shortsMatch = url.pathname.match(
+        /^\/shorts\/([^/?#]+)/
+      );
 
       if (shortsMatch?.[1]) {
         return `https://img.youtube.com/vi/${shortsMatch[1]}/hqdefault.jpg`;
@@ -89,7 +105,9 @@ function getYouTubeThumbnailUrl(videoUrl?: string | null) {
     }
 
     if (host === "youtu.be") {
-      const videoId = url.pathname.split("/").filter(Boolean)[0];
+      const videoId = url.pathname
+        .split("/")
+        .filter(Boolean)[0];
 
       if (videoId) {
         return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
@@ -107,10 +125,16 @@ function getCardImageUrl(story: Story) {
     return null;
   }
 
-  return story.image_url || getYouTubeThumbnailUrl(story.video_url);
+  return (
+    story.image_url ||
+    getYouTubeThumbnailUrl(story.video_url)
+  );
 }
 
-function shortSummary(summary?: string | null, maxLength = 150) {
+function shortSummary(
+  summary?: string | null,
+  maxLength = 150
+) {
   if (!summary) return "";
 
   const cleaned = summary
@@ -118,19 +142,30 @@ function shortSummary(summary?: string | null, maxLength = 150) {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (cleaned.length <= maxLength) return cleaned;
+  if (cleaned.length <= maxLength) {
+    return cleaned;
+  }
 
   const sliced = cleaned.slice(0, maxLength);
   const lastSpace = sliced.lastIndexOf(" ");
 
   return `${sliced
-    .slice(0, lastSpace > 80 ? lastSpace : maxLength)
+    .slice(
+      0,
+      lastSpace > 80 ? lastSpace : maxLength
+    )
     .trim()}...`;
 }
 
 function getCommunityLabel(story: Story) {
-  if (story.is_reader_submission) return "Community Story";
-  if (story.is_reddit_post && story.reddit_subreddit) {
+  if (story.is_reader_submission) {
+    return "Community Story";
+  }
+
+  if (
+    story.is_reddit_post &&
+    story.reddit_subreddit
+  ) {
     return `r/${story.reddit_subreddit}`;
   }
 
@@ -147,13 +182,18 @@ function getCommunitySummary(story: Story) {
   return shortSummary(story.summary, 135);
 }
 
-function VideoFallbackPreview({ height }: { height: number | string }) {
+function VideoFallbackPreview({
+  height,
+}: {
+  height: number | string;
+}) {
   return (
     <div
       style={{
         width: "100%",
         height,
-        background: "linear-gradient(135deg, #ecfdf5, #e0f2fe)",
+        background:
+          "linear-gradient(135deg, #ecfdf5, #e0f2fe)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -163,6 +203,7 @@ function VideoFallbackPreview({ height }: { height: number | string }) {
       }}
     >
       ▶
+
       <span
         style={{
           position: "absolute",
@@ -194,7 +235,8 @@ function UserStoryFallbackPreview({
       style={{
         width: "100%",
         height,
-        background: "linear-gradient(135deg, #fff7ed, #ffedd5)",
+        background:
+          "linear-gradient(135deg, #fff7ed, #ffedd5)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -217,7 +259,8 @@ function UserStoryFallbackPreview({
           justifyContent: "center",
           fontSize: 24,
           fontWeight: 900,
-          boxShadow: "0 8px 18px rgba(154, 52, 18, 0.14)",
+          boxShadow:
+            "0 8px 18px rgba(154, 52, 18, 0.14)",
         }}
       >
         {isVideo ? "▶" : "💬"}
@@ -238,30 +281,58 @@ function UserStoryFallbackPreview({
 }
 
 export default async function HomePage() {
+  /*
+   * Main homepage feed.
+   *
+   * IMPORTANT:
+   * Do not exclude Reddit posts or reader submissions here.
+   * The homepage should represent the newest published stories
+   * across the entire site.
+   */
   const { data, error } = await supabase
     .from("stories")
     .select(
       "id, title, slug, summary, image_url, video_url, category_slug, publish_date, created_at, featured, story_score, source_url, is_reddit_post, is_reader_submission, reddit_subreddit"
     )
     .not("slug", "is", null)
-    .or("is_reddit_post.is.false,is_reddit_post.is.null")
-    .or("is_reader_submission.is.false,is_reader_submission.is.null")
-    .order("publish_date", { ascending: false })
+    .order("publish_date", {
+      ascending: false,
+      nullsFirst: false,
+    })
     .limit(60);
 
+  /*
+   * Separate community section.
+   *
+   * This stays separate so we can intentionally highlight
+   * the newest community stories near the bottom of the
+   * homepage even though community stories are now also
+   * eligible for the main chronological feed.
+   */
   const { data: userStoriesData } = await supabase
     .from("stories")
     .select(
       "id, title, slug, summary, image_url, video_url, category_slug, publish_date, created_at, featured, story_score, source_url, is_reddit_post, is_reader_submission, reddit_subreddit"
     )
     .not("slug", "is", null)
-    .or("category_slug.eq.reddit,is_reader_submission.eq.true")
-    .order("publish_date", { ascending: false })
+    .or(
+      "category_slug.eq.reddit,is_reader_submission.eq.true"
+    )
+    .order("publish_date", {
+      ascending: false,
+      nullsFirst: false,
+    })
     .limit(2);
 
-  const userStories = (userStoriesData || []) as Story[];
+  const userStories =
+    (userStoriesData || []) as Story[];
 
   if (error) {
+    console.error(
+      "Homepage stories fetch error:",
+      error
+    );
+
     return (
       <main
         style={{
@@ -271,7 +342,10 @@ export default async function HomePage() {
         }}
       >
         <h1>The Good in Us</h1>
-        <p>We couldn’t load stories right now.</p>
+
+        <p>
+          We couldn’t load stories right now.
+        </p>
       </main>
     );
   }
@@ -288,11 +362,16 @@ export default async function HomePage() {
         }}
       >
         <h1>The Good in Us</h1>
+
         <p>No stories published yet.</p>
       </main>
     );
   }
 
+  /*
+   * Keep the hero weighted toward quality while strongly
+   * preferring stories from the last 72 hours.
+   */
   const recentHeroCandidates = stories.filter(
     (story) => getAgeHours(story) <= 72
   );
@@ -300,14 +379,30 @@ export default async function HomePage() {
   const featuredStory =
     recentHeroCandidates.length > 0
       ? [...recentHeroCandidates].sort(
-          (a, b) => getFeaturedRank(b) - getFeaturedRank(a)
+          (a, b) =>
+            getFeaturedRank(b) -
+            getFeaturedRank(a)
         )[0]
-      : [...stories].sort((a, b) => getFeaturedRank(b) - getFeaturedRank(a))[0];
+      : [...stories].sort(
+          (a, b) =>
+            getFeaturedRank(b) -
+            getFeaturedRank(a)
+        )[0];
 
-  const featuredImageUrl = getCardImageUrl(featuredStory);
+  const featuredImageUrl =
+    getCardImageUrl(featuredStory);
 
+  /*
+   * The Latest section is strictly freshness-first.
+   *
+   * story_score is used only as a tie breaker when two
+   * stories have the exact same timestamp.
+   */
   const latestStories = [...stories]
-    .filter((story) => story.id !== featuredStory.id)
+    .filter(
+      (story) =>
+        story.id !== featuredStory.id
+    )
     .sort((a, b) => {
       const aDate = getStoryTimestamp(a);
       const bDate = getStoryTimestamp(b);
@@ -316,7 +411,10 @@ export default async function HomePage() {
         return bDate - aDate;
       }
 
-      return (b.story_score || 0) - (a.story_score || 0);
+      return (
+        (b.story_score || 0) -
+        (a.story_score || 0)
+      );
     })
     .slice(0, 18);
 
@@ -354,8 +452,9 @@ export default async function HomePage() {
             lineHeight: 1.5,
           }}
         >
-          The Good in Us shares uplifting stories, inspiring moments, and
-          positive news from around the world.
+          The Good in Us shares uplifting stories,
+          inspiring moments, and positive news from
+          around the world.
         </p>
       </section>
 
@@ -365,8 +464,10 @@ export default async function HomePage() {
           border: "1px solid #e5e7eb",
           borderRadius: 24,
           overflow: "hidden",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-          marginBottom: "clamp(22px, 5vw, 34px)",
+          boxShadow:
+            "0 1px 2px rgba(0,0,0,0.04)",
+          marginBottom:
+            "clamp(22px, 5vw, 34px)",
         }}
       >
         {featuredImageUrl ? (
@@ -378,7 +479,8 @@ export default async function HomePage() {
               fetchPriority="high"
               style={{
                 width: "100%",
-                height: "clamp(200px, 34vw, 360px)",
+                height:
+                  "clamp(200px, 34vw, 360px)",
                 objectFit: "cover",
                 display: "block",
               }}
@@ -391,7 +493,8 @@ export default async function HomePage() {
                   right: 16,
                   bottom: 16,
                   borderRadius: 999,
-                  background: "rgba(15, 23, 42, 0.82)",
+                  background:
+                    "rgba(15, 23, 42, 0.82)",
                   color: "#ffffff",
                   fontSize: 13,
                   fontWeight: 700,
@@ -403,7 +506,9 @@ export default async function HomePage() {
             ) : null}
           </div>
         ) : featuredStory.video_url ? (
-          <VideoFallbackPreview height="clamp(200px, 34vw, 360px)" />
+          <VideoFallbackPreview
+            height="clamp(200px, 34vw, 360px)"
+          />
         ) : null}
 
         <div style={{ padding: 22 }}>
@@ -421,18 +526,26 @@ export default async function HomePage() {
               letterSpacing: "0.08em",
             }}
           >
-            Featured • {formatCategory(featuredStory.category_slug)}
-            {featuredStory.video_url ? " • Video" : ""}
+            Featured •{" "}
+            {formatCategory(
+              featuredStory.category_slug
+            )}
+            {featuredStory.video_url
+              ? " • Video"
+              : ""}
           </div>
 
           <h2
             style={{
               margin: "0 0 10px 0",
-              fontSize: "clamp(26px, 5vw, 36px)",
+              fontSize:
+                "clamp(26px, 5vw, 36px)",
               lineHeight: 1.15,
             }}
           >
-            <Link href={`/stories/${featuredStory.slug}`}>
+            <Link
+              href={`/stories/${featuredStory.slug}`}
+            >
               {featuredStory.title}
             </Link>
           </h2>
@@ -446,7 +559,10 @@ export default async function HomePage() {
                 lineHeight: 1.55,
               }}
             >
-              {shortSummary(featuredStory.summary, 220)}
+              {shortSummary(
+                featuredStory.summary,
+                220
+              )}
             </p>
           ) : null}
 
@@ -460,11 +576,17 @@ export default async function HomePage() {
               fontSize: 14,
             }}
           >
-            <span>{formatDate(featuredStory.publish_date)}</span>
+            <span>
+              {formatDate(
+                featuredStory.publish_date
+              )}
+            </span>
 
             {featuredStory.source_url ? (
               <a
-                href={featuredStory.source_url}
+                href={
+                  featuredStory.source_url
+                }
                 target="_blank"
                 rel="noreferrer"
                 style={{
@@ -491,7 +613,9 @@ export default async function HomePage() {
           }}
         >
           <div>
-            <h2 style={{ margin: 0 }}>Latest uplifting stories</h2>
+            <h2 style={{ margin: 0 }}>
+              Latest uplifting stories
+            </h2>
 
             <p
               style={{
@@ -518,26 +642,34 @@ export default async function HomePage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(260px, 1fr))",
             gap: 18,
           }}
         >
           {latestStories.map((story) => {
-            const cardImageUrl = getCardImageUrl(story);
+            const cardImageUrl =
+              getCardImageUrl(story);
 
             return (
               <article
                 key={story.id}
                 style={{
                   background: "#ffffff",
-                  border: "1px solid #e5e7eb",
+                  border:
+                    "1px solid #e5e7eb",
                   borderRadius: 20,
                   overflow: "hidden",
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                  boxShadow:
+                    "0 1px 2px rgba(0,0,0,0.04)",
                 }}
               >
                 {cardImageUrl ? (
-                  <div style={{ position: "relative" }}>
+                  <div
+                    style={{
+                      position: "relative",
+                    }}
+                  >
                     <img
                       src={cardImageUrl}
                       alt={story.title}
@@ -553,11 +685,13 @@ export default async function HomePage() {
                     {story.video_url ? (
                       <span
                         style={{
-                          position: "absolute",
+                          position:
+                            "absolute",
                           right: 10,
                           bottom: 10,
                           borderRadius: 999,
-                          background: "rgba(15, 23, 42, 0.82)",
+                          background:
+                            "rgba(15, 23, 42, 0.82)",
                           color: "#ffffff",
                           fontSize: 12,
                           fontWeight: 700,
@@ -569,7 +703,9 @@ export default async function HomePage() {
                     ) : null}
                   </div>
                 ) : story.video_url ? (
-                  <VideoFallbackPreview height={160} />
+                  <VideoFallbackPreview
+                    height={160}
+                  />
                 ) : (
                   <div
                     style={{
@@ -578,7 +714,8 @@ export default async function HomePage() {
                       background: "#f1f5f9",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
+                      justifyContent:
+                        "center",
                       fontSize: 32,
                     }}
                   >
@@ -592,23 +729,32 @@ export default async function HomePage() {
                       marginBottom: 8,
                       fontSize: 12,
                       fontWeight: 700,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
+                      textTransform:
+                        "uppercase",
+                      letterSpacing:
+                        "0.08em",
                       color: "#059669",
                     }}
                   >
-                    {formatCategory(story.category_slug)}
-                    {story.video_url ? " • Video" : ""}
+                    {formatCategory(
+                      story.category_slug
+                    )}
+                    {story.video_url
+                      ? " • Video"
+                      : ""}
                   </div>
 
                   <h3
                     style={{
-                      margin: "0 0 9px 0",
+                      margin:
+                        "0 0 9px 0",
                       fontSize: 19,
                       lineHeight: 1.25,
                     }}
                   >
-                    <Link href={`/stories/${story.slug}`}>
+                    <Link
+                      href={`/stories/${story.slug}`}
+                    >
                       {story.title}
                     </Link>
                   </h3>
@@ -616,13 +762,17 @@ export default async function HomePage() {
                   {story.summary ? (
                     <p
                       style={{
-                        margin: "0 0 12px 0",
+                        margin:
+                          "0 0 12px 0",
                         color: "#4b5563",
                         fontSize: 14,
                         lineHeight: 1.5,
                       }}
                     >
-                      {shortSummary(story.summary, 135)}
+                      {shortSummary(
+                        story.summary,
+                        135
+                      )}
                     </p>
                   ) : null}
 
@@ -630,13 +780,18 @@ export default async function HomePage() {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "space-between",
+                      justifyContent:
+                        "space-between",
                       gap: 12,
                       fontSize: 13,
                       color: "#6b7280",
                     }}
                   >
-                    <span>{formatDate(story.publish_date)}</span>
+                    <span>
+                      {formatDate(
+                        story.publish_date
+                      )}
+                    </span>
 
                     <Link
                       href={`/stories/${story.slug}`}
@@ -645,7 +800,9 @@ export default async function HomePage() {
                         fontWeight: 600,
                       }}
                     >
-                      {story.video_url ? "Watch / read" : "Read more"}
+                      {story.video_url
+                        ? "Watch / read"
+                        : "Read more"}
                     </Link>
                   </div>
                 </div>
@@ -661,14 +818,17 @@ export default async function HomePage() {
             style={{
               display: "flex",
               alignItems: "baseline",
-              justifyContent: "space-between",
+              justifyContent:
+                "space-between",
               gap: 16,
               marginBottom: 18,
               flexWrap: "wrap",
             }}
           >
             <div>
-              <h2 style={{ margin: 0 }}>From the community</h2>
+              <h2 style={{ margin: 0 }}>
+                From the community
+              </h2>
 
               <p
                 style={{
@@ -676,7 +836,8 @@ export default async function HomePage() {
                   color: "#6b7280",
                 }}
               >
-                Uplifting stories from users across the internet.
+                Uplifting stories from users
+                across the internet.
               </p>
             </div>
 
@@ -695,23 +856,30 @@ export default async function HomePage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(260px, 1fr))",
               gap: 18,
             }}
           >
             {userStories.map((story) => {
-              const cardImageUrl = getCardImageUrl(story);
-              const isVideo = Boolean(story.video_url);
+              const cardImageUrl =
+                getCardImageUrl(story);
+
+              const isVideo = Boolean(
+                story.video_url
+              );
 
               return (
                 <article
                   key={story.id}
                   style={{
                     background: "#ffffff",
-                    border: "1px solid #ffedd5",
+                    border:
+                      "1px solid #ffedd5",
                     borderRadius: 20,
                     overflow: "hidden",
-                    boxShadow: "0 6px 18px rgba(15, 23, 42, 0.06)",
+                    boxShadow:
+                      "0 6px 18px rgba(15, 23, 42, 0.06)",
                   }}
                 >
                   {cardImageUrl ? (
@@ -727,7 +895,10 @@ export default async function HomePage() {
                       }}
                     />
                   ) : (
-                    <UserStoryFallbackPreview height={160} isVideo={isVideo} />
+                    <UserStoryFallbackPreview
+                      height={160}
+                      isVideo={isVideo}
+                    />
                   )}
 
                   <div style={{ padding: 16 }}>
@@ -736,49 +907,67 @@ export default async function HomePage() {
                         marginBottom: 8,
                         fontSize: 12,
                         fontWeight: 800,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.08em",
+                        textTransform:
+                          "uppercase",
+                        letterSpacing:
+                          "0.08em",
                         color: "#ea580c",
                       }}
                     >
-                      {getCommunityLabel(story)}
-                      {story.video_url ? " • Video" : ""}
+                      {getCommunityLabel(
+                        story
+                      )}
+                      {story.video_url
+                        ? " • Video"
+                        : ""}
                     </div>
 
                     <h3
                       style={{
-                        margin: "0 0 9px 0",
+                        margin:
+                          "0 0 9px 0",
                         fontSize: 19,
                         lineHeight: 1.25,
                       }}
                     >
-                      <Link href={`/stories/${story.slug}`}>
+                      <Link
+                        href={`/stories/${story.slug}`}
+                      >
                         {story.title}
                       </Link>
                     </h3>
 
                     <p
                       style={{
-                        margin: "0 0 12px 0",
+                        margin:
+                          "0 0 12px 0",
                         color: "#4b5563",
                         fontSize: 14,
                         lineHeight: 1.5,
                       }}
                     >
-                      {getCommunitySummary(story)}
+                      {getCommunitySummary(
+                        story
+                      )}
                     </p>
 
                     <div
                       style={{
                         display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
+                        alignItems:
+                          "center",
+                        justifyContent:
+                          "space-between",
                         gap: 12,
                         fontSize: 13,
                         color: "#6b7280",
                       }}
                     >
-                      <span>{formatDate(story.publish_date)}</span>
+                      <span>
+                        {formatDate(
+                          story.publish_date
+                        )}
+                      </span>
 
                       <Link
                         href={`/stories/${story.slug}`}
@@ -787,7 +976,9 @@ export default async function HomePage() {
                           fontWeight: 600,
                         }}
                       >
-                        {story.video_url ? "Watch / read" : "Read more"}
+                        {story.video_url
+                          ? "Watch / read"
+                          : "Read more"}
                       </Link>
                     </div>
                   </div>
