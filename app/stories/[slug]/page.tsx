@@ -30,7 +30,9 @@ type RelatedStory = {
   slug: string;
 };
 
-async function getStory(slug: string): Promise<Story | null> {
+async function getStory(
+  slug: string
+): Promise<Story | null> {
   const { data } = await supabase
     .from("stories")
     .select("*")
@@ -40,17 +42,114 @@ async function getStory(slug: string): Promise<Story | null> {
   return (data as Story | null) ?? null;
 }
 
-function cleanTextForMeta(text: string) {
+function decodeHtmlEntities(text: string) {
   return text
+    .replace(/&#32;/gi, " ")
+    .replace(/&#160;/gi, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#8217;/gi, "'")
+    .replace(/&#8216;/gi, "'")
+    .replace(/&#8220;/gi, '"')
+    .replace(/&#8221;/gi, '"')
+    .replace(/&#8230;/gi, "...")
+    .replace(/&#038;/gi, "&")
+    .replace(/&#39;/gi, "'")
+    .replace(/&#039;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function cleanTextForMeta(text: string) {
+  return decodeHtmlEntities(text)
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function truncateForMeta(text: string, maxLength = 160) {
-  if (text.length <= maxLength) return text;
+function normalizeForComparison(text: string) {
+  return cleanTextForMeta(text)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function contentRepeatsSummary(
+  summary: string | null,
+  content: string | null
+) {
+  if (!summary || !content) {
+    return false;
+  }
+
+  const normalizedSummary =
+    normalizeForComparison(summary);
+
+  const normalizedContent =
+    normalizeForComparison(content);
+
+  if (
+    !normalizedSummary ||
+    !normalizedContent
+  ) {
+    return false;
+  }
+
+  /*
+   * Exact/near-exact duplication.
+   */
+  if (
+    normalizedContent.startsWith(
+      normalizedSummary
+    ) ||
+    normalizedSummary.startsWith(
+      normalizedContent
+    )
+  ) {
+    return true;
+  }
+
+  /*
+   * Some imported content has a short introductory
+   * label before repeating the description.
+   */
+  const comparisonLength = Math.min(
+    normalizedSummary.length,
+    180
+  );
+
+  if (comparisonLength >= 60) {
+    const summaryBeginning =
+      normalizedSummary.slice(
+        0,
+        comparisonLength
+      );
+
+    if (
+      normalizedContent
+        .slice(0, comparisonLength + 120)
+        .includes(summaryBeginning)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function truncateForMeta(
+  text: string,
+  maxLength = 160
+) {
+  if (text.length <= maxLength) {
+    return text;
+  }
 
   const sliced = text.slice(0, maxLength);
+
   const lastSentenceEnd = Math.max(
     sliced.lastIndexOf(". "),
     sliced.lastIndexOf("! "),
@@ -58,34 +157,46 @@ function truncateForMeta(text: string, maxLength = 160) {
   );
 
   if (lastSentenceEnd > 80) {
-    return `${sliced.slice(0, lastSentenceEnd + 1).trim()}...`;
+    return `${sliced
+      .slice(0, lastSentenceEnd + 1)
+      .trim()}...`;
   }
 
   const lastSpace = sliced.lastIndexOf(" ");
 
   if (lastSpace > 80) {
-    return `${sliced.slice(0, lastSpace).trim()}...`;
+    return `${sliced
+      .slice(0, lastSpace)
+      .trim()}...`;
   }
 
   return `${sliced.trim()}...`;
 }
 
-function toIsoDateTime(value: string | null) {
+function toIsoDateTime(
+  value: string | null
+) {
   if (!value) return undefined;
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return undefined;
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
 
   return date.toISOString();
 }
 
-function formatReadableDate(dateString: string | null) {
+function formatReadableDate(
+  dateString: string | null
+) {
   if (!dateString) return null;
 
   const date = new Date(dateString);
 
-  if (Number.isNaN(date.getTime())) return null;
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
 
   return date.toLocaleDateString("en-US", {
     month: "long",
@@ -94,34 +205,53 @@ function formatReadableDate(dateString: string | null) {
   });
 }
 
-function formatCategoryName(slug: string | null) {
+function formatCategoryName(
+  slug: string | null
+) {
   if (!slug) return "Hope";
 
-  if (slug === "reddit" || slug === "user-stories") {
+  if (
+    slug === "reddit" ||
+    slug === "user-stories"
+  ) {
     return "User Stories";
   }
 
   return slug
     .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+    )
     .join(" ");
 }
 
-function getVideoEmbedUrl(value: string | null | undefined) {
+function getVideoEmbedUrl(
+  value: string | null | undefined
+) {
   if (!value) return null;
 
   try {
     const url = new URL(value);
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const host = url.hostname
+      .toLowerCase()
+      .replace(/^www\./, "");
 
-    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
-      const videoId = url.searchParams.get("v");
+    if (
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com")
+    ) {
+      const videoId =
+        url.searchParams.get("v");
 
       if (videoId) {
         return `https://www.youtube.com/embed/${videoId}`;
       }
 
-      const shortsMatch = url.pathname.match(/^\/shorts\/([^/?#]+)/);
+      const shortsMatch = url.pathname.match(
+        /^\/shorts\/([^/?#]+)/
+      );
 
       if (shortsMatch?.[1]) {
         return `https://www.youtube.com/embed/${shortsMatch[1]}`;
@@ -129,15 +259,22 @@ function getVideoEmbedUrl(value: string | null | undefined) {
     }
 
     if (host === "youtu.be") {
-      const videoId = url.pathname.split("/").filter(Boolean)[0];
+      const videoId = url.pathname
+        .split("/")
+        .filter(Boolean)[0];
 
       if (videoId) {
         return `https://www.youtube.com/embed/${videoId}`;
       }
     }
 
-    if (host === "vimeo.com" || host.endsWith(".vimeo.com")) {
-      const videoId = url.pathname.split("/").filter(Boolean)[0];
+    if (
+      host === "vimeo.com" ||
+      host.endsWith(".vimeo.com")
+    ) {
+      const videoId = url.pathname
+        .split("/")
+        .filter(Boolean)[0];
 
       if (videoId) {
         return `https://player.vimeo.com/video/${videoId}`;
@@ -150,7 +287,9 @@ function getVideoEmbedUrl(value: string | null | undefined) {
   }
 }
 
-function getDirectVideoUrl(value: string | null | undefined) {
+function getDirectVideoUrl(
+  value: string | null | undefined
+) {
   if (!value) return null;
 
   try {
@@ -166,14 +305,23 @@ function getDirectVideoUrl(value: string | null | undefined) {
   }
 }
 
-function getAbsoluteImageUrl(value: string | null, siteUrl: string) {
-  if (!value) return `${siteUrl}/og-image.jpg`;
+function getAbsoluteImageUrl(
+  value: string | null,
+  siteUrl: string
+) {
+  if (!value) {
+    return `${siteUrl}/og-image.jpg`;
+  }
 
   if (value.startsWith("http")) {
     return value;
   }
 
-  return `${siteUrl}${value.startsWith("/") ? value : `/${value}`}`;
+  return `${siteUrl}${
+    value.startsWith("/")
+      ? value
+      : `/${value}`
+  }`;
 }
 
 export async function generateMetadata({
@@ -183,30 +331,49 @@ export async function generateMetadata({
   const story = await getStory(slug);
 
   const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "https://www.thegoodinus.net";
 
   if (!story) {
     return {
-      title: "Story not found | The Good in Us",
-      robots: { index: false, follow: false },
+      title:
+        "Story not found | The Good in Us",
+      robots: {
+        index: false,
+        follow: false,
+      },
     };
   }
 
-  const cleanText = cleanTextForMeta(story.summary ?? story.content ?? "");
+  const cleanText = cleanTextForMeta(
+    story.summary ??
+      story.content ??
+      ""
+  );
 
   const description =
-    truncateForMeta(cleanText) || "An uplifting story from The Good in Us.";
+    truncateForMeta(cleanText) ||
+    "An uplifting story from The Good in Us.";
 
-  const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
-  const ogImage = getAbsoluteImageUrl(story.image_url, siteUrl);
-  const publishedTime = toIsoDateTime(story.publish_date);
+  const canonicalUrl =
+    `${siteUrl}/stories/${story.slug}`;
+
+  const ogImage = getAbsoluteImageUrl(
+    story.image_url,
+    siteUrl
+  );
+
+  const publishedTime =
+    toIsoDateTime(story.publish_date);
 
   return {
     title: story.title,
     description,
+
     alternates: {
       canonical: canonicalUrl,
     },
+
     openGraph: {
       type: "article",
       url: canonicalUrl,
@@ -220,12 +387,14 @@ export async function generateMetadata({
       ],
       publishedTime,
     },
+
     twitter: {
       card: "summary_large_image",
       title: story.title,
       description,
       images: [ogImage],
     },
+
     robots: {
       index: true,
       follow: true,
@@ -233,60 +402,124 @@ export async function generateMetadata({
   };
 }
 
-export default async function StoryPage({ params }: StoryPageProps) {
+export default async function StoryPage({
+  params,
+}: StoryPageProps) {
   const { slug } = await params;
   const story = await getStory(slug);
 
   const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "https://thegoodinus.net";
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "https://www.thegoodinus.net";
 
   if (!story) {
     return (
-      <article style={{ maxWidth: 760, margin: "0 auto", padding: 40 }}>
+      <article
+        style={{
+          maxWidth: 760,
+          margin: "0 auto",
+          padding: 40,
+        }}
+      >
         <h1>Story not found.</h1>
         <p>We couldn’t find that article.</p>
       </article>
     );
   }
 
-  const canonicalUrl = `${siteUrl}/stories/${story.slug}`;
-  const imageUrl = getAbsoluteImageUrl(story.image_url, siteUrl);
-  const formattedDate = formatReadableDate(story.publish_date);
-  const structuredDate = toIsoDateTime(story.publish_date);
-  const categoryName = formatCategoryName(story.category_slug);
-  const videoEmbedUrl = getVideoEmbedUrl(story.video_url);
-  const directVideoUrl = getDirectVideoUrl(story.video_url);
-  const isRedditVideoPost = Boolean(story.is_reddit_post && story.video_url);
+  const canonicalUrl =
+    `${siteUrl}/stories/${story.slug}`;
+
+  const imageUrl = getAbsoluteImageUrl(
+    story.image_url,
+    siteUrl
+  );
+
+  const formattedDate =
+    formatReadableDate(
+      story.publish_date
+    );
+
+  const structuredDate =
+    toIsoDateTime(
+      story.publish_date
+    );
+
+  const categoryName =
+    formatCategoryName(
+      story.category_slug
+    );
+
+  const videoEmbedUrl =
+    getVideoEmbedUrl(
+      story.video_url
+    );
+
+  const directVideoUrl =
+    getDirectVideoUrl(
+      story.video_url
+    );
+
+  const isRedditVideoPost = Boolean(
+    story.is_reddit_post &&
+      story.video_url
+  );
 
   const showFooterAttribution = Boolean(
-    story.source_url && story.source_name && !story.is_reddit_post
+    story.source_url &&
+      story.source_name &&
+      !story.is_reddit_post
   );
 
   const showSubmittedBy = Boolean(
-    story.is_reader_submission && story.submitted_by_name
+    story.is_reader_submission &&
+      story.submitted_by_name
   );
 
   const authorName =
-    story.is_reader_submission && story.submitted_by_name
+    story.is_reader_submission &&
+    story.submitted_by_name
       ? story.submitted_by_name
       : "The Good in Us";
 
-  const cleanSummary = cleanTextForMeta(story.summary ?? "");
-  const cleanContent = cleanTextForMeta(story.content ?? "");
+  const cleanSummary =
+    cleanTextForMeta(
+      story.summary ?? ""
+    );
+
+  const cleanContent =
+    cleanTextForMeta(
+      story.content ?? ""
+    );
+
+  const shouldShowSummary =
+    Boolean(story.summary) &&
+    !story.is_reddit_post &&
+    !contentRepeatsSummary(
+      story.summary,
+      story.content
+    );
 
   const description =
-    truncateForMeta(cleanSummary || cleanContent) ||
+    truncateForMeta(
+      cleanSummary || cleanContent
+    ) ||
     "An uplifting story from The Good in Us.";
 
-  const { data: relatedStories } = await supabase
-    .from("stories")
-    .select("id, title, slug")
-    .not("slug", "is", null)
-    .neq("slug", story.slug)
-    .order("publish_date", { ascending: false })
-    .limit(4);
+  const { data: relatedStories } =
+    await supabase
+      .from("stories")
+      .select("id, title, slug")
+      .not("slug", "is", null)
+      .neq("slug", story.slug)
+      .order("publish_date", {
+        ascending: false,
+      })
+      .limit(4);
 
-  const related = (relatedStories || []) as RelatedStory[];
+  const related =
+    (relatedStories ||
+      []) as RelatedStory[];
 
   const articleStructuredData = {
     "@context": "https://schema.org",
@@ -294,55 +527,100 @@ export default async function StoryPage({ params }: StoryPageProps) {
     headline: story.title,
     description,
     image: [imageUrl],
-    datePublished: structuredDate,
-    dateModified: structuredDate,
+
+    datePublished:
+      structuredDate,
+
+    dateModified:
+      structuredDate,
+
     author: {
       "@type": "Person",
       name: authorName,
     },
+
     publisher: {
       "@type": "Organization",
       name: "The Good in Us",
+
       logo: {
         "@type": "ImageObject",
         url: `${siteUrl}/og-image.jpg`,
       },
     },
-    articleSection: formatCategoryName(story.category_slug),
+
+    articleSection:
+      formatCategoryName(
+        story.category_slug
+      ),
+
     mainEntityOfPage: {
       "@type": "WebPage",
       "@id": canonicalUrl,
     },
   };
 
-  const videoStructuredData = story.video_url
-    ? {
-        "@context": "https://schema.org",
-        "@type": "VideoObject",
-        name: story.title,
-        description,
-        thumbnailUrl: [imageUrl],
-        uploadDate: structuredDate,
-        contentUrl: story.video_url,
-        embedUrl:
-          videoEmbedUrl || directVideoUrl || story.source_url || story.video_url,
-        publisher: {
-          "@type": "Organization",
-          name: "The Good in Us",
-          logo: {
-            "@type": "ImageObject",
-            url: `${siteUrl}/og-image.jpg`,
+  const videoStructuredData =
+    story.video_url
+      ? {
+          "@context":
+            "https://schema.org",
+
+          "@type":
+            "VideoObject",
+
+          name: story.title,
+
+          description,
+
+          thumbnailUrl: [
+            imageUrl,
+          ],
+
+          uploadDate:
+            structuredDate,
+
+          contentUrl:
+            story.video_url,
+
+          embedUrl:
+            videoEmbedUrl ||
+            directVideoUrl ||
+            story.source_url ||
+            story.video_url,
+
+          publisher: {
+            "@type":
+              "Organization",
+
+            name:
+              "The Good in Us",
+
+            logo: {
+              "@type":
+                "ImageObject",
+
+              url:
+                `${siteUrl}/og-image.jpg`,
+            },
           },
-        },
-      }
-    : null;
+        }
+      : null;
 
   return (
-    <article style={{ maxWidth: 760, margin: "0 auto", padding: 40 }}>
+    <article
+      style={{
+        maxWidth: 760,
+        margin: "0 auto",
+        padding: 40,
+      }}
+    >
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(articleStructuredData),
+          __html: JSON.stringify(
+            articleStructuredData
+          ),
         }}
       />
 
@@ -350,15 +628,29 @@ export default async function StoryPage({ params }: StoryPageProps) {
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(videoStructuredData),
+            __html: JSON.stringify(
+              videoStructuredData
+            ),
           }}
         />
       ) : null}
 
-      <div style={{ marginBottom: 24 }}>
-        <small style={{ textTransform: "capitalize", color: "#64748b" }}>
+      <div
+        style={{
+          marginBottom: 24,
+        }}
+      >
+        <small
+          style={{
+            textTransform:
+              "capitalize",
+            color: "#64748b",
+          }}
+        >
           {categoryName}
-          {formattedDate ? ` • ${formattedDate}` : ""}
+          {formattedDate
+            ? ` • ${formattedDate}`
+            : ""}
         </small>
 
         <h1
@@ -371,9 +663,17 @@ export default async function StoryPage({ params }: StoryPageProps) {
           {story.title}
         </h1>
 
-        {story.source_name && !story.is_reddit_post ? (
-          <p style={{ color: "#6b7280", fontSize: 14, marginTop: 0 }}>
-            Originally published on {story.source_name}
+        {story.source_name &&
+        !story.is_reddit_post ? (
+          <p
+            style={{
+              color: "#6b7280",
+              fontSize: 14,
+              marginTop: 0,
+            }}
+          >
+            Originally published on{" "}
+            {story.source_name}
           </p>
         ) : null}
       </div>
@@ -384,13 +684,20 @@ export default async function StoryPage({ params }: StoryPageProps) {
             width: "100%",
             minHeight: 320,
             borderRadius: 20,
-            background: story.image_url
-              ? `linear-gradient(rgba(15, 23, 42, 0.32), rgba(15, 23, 42, 0.52)), url(${story.image_url}) center / cover`
-              : "linear-gradient(135deg, #fff7ed, #fed7aa)",
-            margin: "20px 0 12px",
+
+            background:
+              story.image_url
+                ? `linear-gradient(rgba(15, 23, 42, 0.32), rgba(15, 23, 42, 0.52)), url(${story.image_url}) center / cover`
+                : "linear-gradient(135deg, #fff7ed, #fed7aa)",
+
+            margin:
+              "20px 0 12px",
+
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
+            justifyContent:
+              "center",
+
             padding: 28,
             boxSizing: "border-box",
             textAlign: "center",
@@ -398,26 +705,43 @@ export default async function StoryPage({ params }: StoryPageProps) {
         >
           <div
             style={{
-              background: "rgba(255, 255, 255, 0.94)",
+              background:
+                "rgba(255, 255, 255, 0.94)",
+
               borderRadius: 18,
               padding: "22px 24px",
               maxWidth: 420,
-              boxShadow: "0 10px 24px rgba(15, 23, 42, 0.16)",
+
+              boxShadow:
+                "0 10px 24px rgba(15, 23, 42, 0.16)",
             }}
           >
             <div
               style={{
                 width: 58,
                 height: 58,
-                borderRadius: "999px",
-                background: "#111827",
-                color: "#ffffff",
+                borderRadius:
+                  "999px",
+
+                background:
+                  "#111827",
+
+                color:
+                  "#ffffff",
+
                 display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+                alignItems:
+                  "center",
+
+                justifyContent:
+                  "center",
+
                 fontSize: 24,
                 fontWeight: 900,
-                margin: "0 auto 14px",
+
+                margin:
+                  "0 auto 14px",
+
                 paddingLeft: 4,
               }}
             >
@@ -428,9 +752,16 @@ export default async function StoryPage({ params }: StoryPageProps) {
               style={{
                 fontSize: 13,
                 fontWeight: 800,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "#ea580c",
+
+                letterSpacing:
+                  "0.08em",
+
+                textTransform:
+                  "uppercase",
+
+                color:
+                  "#ea580c",
+
                 marginBottom: 8,
               }}
             >
@@ -440,13 +771,19 @@ export default async function StoryPage({ params }: StoryPageProps) {
             <p
               style={{
                 margin: 0,
-                color: "#374151",
+
+                color:
+                  "#374151",
+
                 fontSize: 15,
+
                 lineHeight: 1.6,
               }}
             >
-              This video is hosted on Reddit. Open the original discussion to
-              watch it there.
+              This video is hosted on
+              Reddit. Open the original
+              discussion to watch it
+              there.
             </p>
           </div>
         </div>
@@ -455,24 +792,37 @@ export default async function StoryPage({ params }: StoryPageProps) {
           src={directVideoUrl}
           controls
           playsInline
-          poster={story.image_url || undefined}
+          poster={
+            story.image_url ||
+            undefined
+          }
           style={{
             width: "100%",
             maxHeight: 520,
             borderRadius: 20,
             background: "#000",
-            margin: story.is_reddit_post ? "20px 0 12px" : "20px 0 28px",
+
+            margin:
+              story.is_reddit_post
+                ? "20px 0 12px"
+                : "20px 0 28px",
           }}
         />
       ) : videoEmbedUrl ? (
         <div
           style={{
-            aspectRatio: "16 / 9",
+            aspectRatio:
+              "16 / 9",
+
             width: "100%",
             overflow: "hidden",
             borderRadius: 20,
             background: "#000",
-            margin: story.is_reddit_post ? "20px 0 12px" : "20px 0 28px",
+
+            margin:
+              story.is_reddit_post
+                ? "20px 0 12px"
+                : "20px 0 28px",
           }}
         >
           <iframe
@@ -494,14 +844,21 @@ export default async function StoryPage({ params }: StoryPageProps) {
           style={{
             width: "100%",
             maxHeight: 420,
-            objectFit: "cover",
+
+            objectFit:
+              "cover",
+
             borderRadius: 20,
-            margin: story.is_reddit_post ? "20px 0 12px" : "20px 0 28px",
+
+            margin:
+              story.is_reddit_post
+                ? "20px 0 12px"
+                : "20px 0 28px",
           }}
         />
       ) : null}
 
-      {story.summary && !story.is_reddit_post ? (
+      {shouldShowSummary ? (
         <p
           style={{
             fontSize: 18,
@@ -509,11 +866,12 @@ export default async function StoryPage({ params }: StoryPageProps) {
             color: "#475569",
           }}
         >
-          {cleanTextForMeta(story.summary)}
+          {cleanSummary}
         </p>
       ) : null}
 
-      {story.content && !story.is_reddit_post ? (
+      {story.content &&
+      !story.is_reddit_post ? (
         <div
           style={{
             fontSize: 18,
@@ -526,32 +884,49 @@ export default async function StoryPage({ params }: StoryPageProps) {
         />
       ) : null}
 
-      {showFooterAttribution || showSubmittedBy ? (
+      {showFooterAttribution ||
+      showSubmittedBy ? (
         <div
           style={{
             marginTop: 36,
             paddingTop: 20,
-            borderTop: "1px solid #e2e8f0",
-            color: "#475569",
+
+            borderTop:
+              "1px solid #e2e8f0",
+
+            color:
+              "#475569",
+
             fontSize: 15,
+
             lineHeight: 1.6,
           }}
         >
           {showFooterAttribution ? (
             <div
               style={{
-                marginBottom: showSubmittedBy ? 8 : 0,
+                marginBottom:
+                  showSubmittedBy
+                    ? 8
+                    : 0,
               }}
             >
               Originally published on{" "}
               <a
-                href={story.source_url}
+                href={
+                  story.source_url
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
-                  color: "#0f172a",
-                  fontWeight: 600,
-                  textDecoration: "underline",
+                  color:
+                    "#0f172a",
+
+                  fontWeight:
+                    600,
+
+                  textDecoration:
+                    "underline",
                 }}
               >
                 {story.source_name}
@@ -563,25 +938,49 @@ export default async function StoryPage({ params }: StoryPageProps) {
           {showSubmittedBy ? (
             <div>
               Submitted by{" "}
-              <span style={{ fontWeight: 600 }}>{story.submitted_by_name}</span>
+              <span
+                style={{
+                  fontWeight: 600,
+                }}
+              >
+                {
+                  story.submitted_by_name
+                }
+              </span>
             </div>
           ) : null}
         </div>
       ) : null}
 
-      {story.is_reddit_post && story.source_url ? (
-        <div style={{ marginTop: 24 }}>
+      {story.is_reddit_post &&
+      story.source_url ? (
+        <div
+          style={{
+            marginTop: 24,
+          }}
+        >
           <a
             href={story.source_url}
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              display: "inline-block",
-              padding: "10px 16px",
-              background: "#111827",
-              color: "#ffffff",
+              display:
+                "inline-block",
+
+              padding:
+                "10px 16px",
+
+              background:
+                "#111827",
+
+              color:
+                "#ffffff",
+
               borderRadius: 6,
-              textDecoration: "none",
+
+              textDecoration:
+                "none",
+
               fontSize: 14,
             }}
           >
@@ -592,7 +991,11 @@ export default async function StoryPage({ params }: StoryPageProps) {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 32 }}>
+      <div
+        style={{
+          marginTop: 32,
+        }}
+      >
         <Link
           href="/submit"
           style={{
@@ -601,7 +1004,8 @@ export default async function StoryPage({ params }: StoryPageProps) {
             fontSize: 15,
           }}
         >
-          Have a story like this? Submit it here →
+          Have a story like this?
+          Submit it here →
         </Link>
       </div>
 
@@ -610,26 +1014,53 @@ export default async function StoryPage({ params }: StoryPageProps) {
           style={{
             marginTop: 44,
             paddingTop: 28,
-            borderTop: "1px solid #e2e8f0",
+
+            borderTop:
+              "1px solid #e2e8f0",
           }}
         >
-          <h2 style={{ fontSize: 24, marginBottom: 16 }}>More good news</h2>
+          <h2
+            style={{
+              fontSize: 24,
+              marginBottom: 16,
+            }}
+          >
+            More good news
+          </h2>
 
-          <ul style={{ paddingLeft: 20, lineHeight: 1.8 }}>
-            {related.map((relatedStory) => (
-              <li key={relatedStory.id}>
-                <Link
-                  href={`/stories/${relatedStory.slug}`}
-                  style={{
-                    color: "#0f172a",
-                    fontWeight: 600,
-                    textDecoration: "underline",
-                  }}
+          <ul
+            style={{
+              paddingLeft: 20,
+              lineHeight: 1.8,
+            }}
+          >
+            {related.map(
+              (relatedStory) => (
+                <li
+                  key={
+                    relatedStory.id
+                  }
                 >
-                  {relatedStory.title}
-                </Link>
-              </li>
-            ))}
+                  <Link
+                    href={`/stories/${relatedStory.slug}`}
+                    style={{
+                      color:
+                        "#0f172a",
+
+                      fontWeight:
+                        600,
+
+                      textDecoration:
+                        "underline",
+                    }}
+                  >
+                    {
+                      relatedStory.title
+                    }
+                  </Link>
+                </li>
+              )
+            )}
           </ul>
         </section>
       ) : null}

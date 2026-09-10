@@ -34,6 +34,10 @@ function formatDate(dateString?: string | null) {
 
   const date = new Date(dateString);
 
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -131,13 +135,33 @@ function getCardImageUrl(story: Story) {
   );
 }
 
+function decodeHtmlEntities(text: string) {
+  return text
+    .replace(/&#32;/gi, " ")
+    .replace(/&#160;/gi, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#8217;/gi, "'")
+    .replace(/&#8216;/gi, "'")
+    .replace(/&#8220;/gi, '"')
+    .replace(/&#8221;/gi, '"')
+    .replace(/&#8230;/gi, "...")
+    .replace(/&#038;/gi, "&")
+    .replace(/&#39;/gi, "'")
+    .replace(/&#039;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
 function shortSummary(
   summary?: string | null,
   maxLength = 150
 ) {
   if (!summary) return "";
 
-  const cleaned = summary
+  const cleaned = decodeHtmlEntities(summary)
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -155,6 +179,41 @@ function shortSummary(
       lastSpace > 80 ? lastSpace : maxLength
     )
     .trim()}...`;
+}
+
+function cleanRedditSummary(summary?: string | null) {
+  if (!summary) return "";
+
+  return decodeHtmlEntities(summary)
+    .replace(/<[^>]*>/g, " ")
+    .replace(
+      /submitted\s+by\s+\/?u\/[^\s\[]+/gi,
+      ""
+    )
+    .replace(
+      /submitted\s+by\s+[^\s\[]+/gi,
+      ""
+    )
+    .replace(/\[link\]/gi, "")
+    .replace(/\[comments\]/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getCardSummary(story: Story) {
+  if (story.is_reddit_post) {
+    const cleaned = cleanRedditSummary(story.summary);
+
+    if (cleaned) {
+      return shortSummary(cleaned, 135);
+    }
+
+    return story.video_url
+      ? "Watch this feel-good Reddit video on the original thread."
+      : "A feel-good story shared from Reddit.";
+  }
+
+  return shortSummary(story.summary, 135);
 }
 
 function getCommunityLabel(story: Story) {
@@ -176,7 +235,7 @@ function getCommunitySummary(story: Story) {
   if (story.is_reddit_post) {
     return story.video_url
       ? "Watch this feel-good Reddit video on the original thread."
-      : "A feel-good Reddit post curated from r/MadeMeSmile.";
+      : "A feel-good story shared from Reddit.";
   }
 
   return shortSummary(story.summary, 135);
@@ -281,14 +340,6 @@ function UserStoryFallbackPreview({
 }
 
 export default async function HomePage() {
-  /*
-   * Main homepage feed.
-   *
-   * IMPORTANT:
-   * Do not exclude Reddit posts or reader submissions here.
-   * The homepage should represent the newest published stories
-   * across the entire site.
-   */
   const { data, error } = await supabase
     .from("stories")
     .select(
@@ -301,14 +352,6 @@ export default async function HomePage() {
     })
     .limit(60);
 
-  /*
-   * Separate community section.
-   *
-   * This stays separate so we can intentionally highlight
-   * the newest community stories near the bottom of the
-   * homepage even though community stories are now also
-   * eligible for the main chronological feed.
-   */
   const { data: userStoriesData } = await supabase
     .from("stories")
     .select(
@@ -342,10 +385,7 @@ export default async function HomePage() {
         }}
       >
         <h1>The Good in Us</h1>
-
-        <p>
-          We couldn’t load stories right now.
-        </p>
+        <p>We couldn’t load stories right now.</p>
       </main>
     );
   }
@@ -362,16 +402,11 @@ export default async function HomePage() {
         }}
       >
         <h1>The Good in Us</h1>
-
         <p>No stories published yet.</p>
       </main>
     );
   }
 
-  /*
-   * Keep the hero weighted toward quality while strongly
-   * preferring stories from the last 72 hours.
-   */
   const recentHeroCandidates = stories.filter(
     (story) => getAgeHours(story) <= 72
   );
@@ -392,12 +427,6 @@ export default async function HomePage() {
   const featuredImageUrl =
     getCardImageUrl(featuredStory);
 
-  /*
-   * The Latest section is strictly freshness-first.
-   *
-   * story_score is used only as a tie breaker when two
-   * stories have the exact same timestamp.
-   */
   const latestStories = [...stories]
     .filter(
       (story) =>
@@ -559,10 +588,12 @@ export default async function HomePage() {
                 lineHeight: 1.55,
               }}
             >
-              {shortSummary(
-                featuredStory.summary,
-                220
-              )}
+              {featuredStory.is_reddit_post
+                ? getCardSummary(featuredStory)
+                : shortSummary(
+                    featuredStory.summary,
+                    220
+                  )}
             </p>
           ) : null}
 
@@ -650,6 +681,9 @@ export default async function HomePage() {
           {latestStories.map((story) => {
             const cardImageUrl =
               getCardImageUrl(story);
+
+            const cardSummary =
+              getCardSummary(story);
 
             return (
               <article
@@ -759,7 +793,7 @@ export default async function HomePage() {
                     </Link>
                   </h3>
 
-                  {story.summary ? (
+                  {cardSummary ? (
                     <p
                       style={{
                         margin:
@@ -769,10 +803,7 @@ export default async function HomePage() {
                         lineHeight: 1.5,
                       }}
                     >
-                      {shortSummary(
-                        story.summary,
-                        135
-                      )}
+                      {cardSummary}
                     </p>
                   ) : null}
 
