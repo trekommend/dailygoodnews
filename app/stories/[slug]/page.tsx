@@ -91,9 +91,6 @@ function contentRepeatsSummary(
     return false;
   }
 
-  /*
-   * Exact/near-exact duplication.
-   */
   if (
     normalizedContent.startsWith(normalizedSummary) ||
     normalizedSummary.startsWith(normalizedContent)
@@ -101,10 +98,6 @@ function contentRepeatsSummary(
     return true;
   }
 
-  /*
-   * Some imported content has a short introductory
-   * label before repeating the description.
-   */
   const comparisonLength = Math.min(
     normalizedSummary.length,
     180
@@ -292,6 +285,103 @@ function getAbsoluteImageUrl(
   return `${siteUrl}${
     value.startsWith("/") ? value : `/${value}`
   }`;
+}
+
+/*
+ * ARTICLE CONTENT FORMATTING
+ *
+ * Plain-text stories:
+ * - Convert blank-line-separated blocks into paragraphs.
+ * - Recognize section headings.
+ * - Use tighter paragraph spacing.
+ *
+ * HTML-formatted stories:
+ * - Preserve their existing HTML.
+ * - Avoid introducing extra line breaks.
+ */
+
+function renderArticleContent(content: string) {
+  const articleStyle = {
+    fontSize: 18,
+    lineHeight: 1.65,
+    color: "#0f172a",
+  };
+
+  // Preserve existing HTML-formatted stories.
+  if (
+    /<(?:p|div|h[1-6]|ul|ol|li|blockquote|br)\b/i.test(
+      content
+    )
+  ) {
+    return (
+      <div
+        style={articleStyle}
+        dangerouslySetInnerHTML={{
+          __html: content,
+        }}
+      />
+    );
+  }
+
+  // Headings in the expanded Halloween fundraising article.
+  const sectionHeadings = new Set([
+    "From a Halloween display to a national movement",
+    "How the Halloween fundraiser works",
+    "Communities are joining in",
+    "Why this feels good",
+  ]);
+
+  // Also support Markdown-style headings for future stories.
+  const paragraphs = content
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  return (
+    <div style={articleStyle}>
+      {paragraphs.map((paragraph, index) => {
+        const isMarkdownHeading = /^#{2,3}\s+/.test(
+          paragraph
+        );
+
+        const cleanHeading = paragraph
+          .replace(/^#{2,3}\s+/, "")
+          .trim();
+
+        if (
+          isMarkdownHeading ||
+          sectionHeadings.has(paragraph)
+        ) {
+          return (
+            <h2
+              key={index}
+              style={{
+                fontSize: 23,
+                fontWeight: 700,
+                lineHeight: 1.3,
+                margin: "24px 0 10px",
+                color: "#0f172a",
+              }}
+            >
+              {cleanHeading}
+            </h2>
+          );
+        }
+
+        return (
+          <p
+            key={index}
+            style={{
+              margin: "0 0 12px",
+            }}
+          >
+            {paragraph}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 export async function generateMetadata({
@@ -748,23 +838,10 @@ export default async function StoryPage({
         </p>
       ) : null}
 
-      {story.content &&
-      !story.is_reddit_post ? (
-        <div
-          style={{
-            fontSize: 18,
-            lineHeight: 1.8,
-            color: "#0f172a",
-
-            // Preserve paragraph breaks in plain-text
-            // stories stored in Supabase.
-            whiteSpace: "pre-line",
-          }}
-          dangerouslySetInnerHTML={{
-            __html: story.content,
-          }}
-        />
-      ) : null}
+      {/* UPDATED ARTICLE CONTENT FORMATTING */}
+      {story.content && !story.is_reddit_post
+        ? renderArticleContent(story.content)
+        : null}
 
       {showFooterAttribution ||
       showSubmittedBy ? (
